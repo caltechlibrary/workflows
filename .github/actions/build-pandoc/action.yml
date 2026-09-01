@@ -1,0 +1,102 @@
+name: Build docs with Pandoc
+description: >-
+  Install Pandoc and render a Markdown directory into a static site using the
+  shared Caltech Library theme. Search indexing is a separate action, because
+  it works on built HTML and applies to any generator.
+
+inputs:
+  docs-dir:
+    description: Directory holding the Markdown sources.
+    required: false
+    default: docs
+  output:
+    description: Directory to assemble the site into.
+    required: false
+    default: _site
+  extra-sources:
+    description: >-
+      Markdown outside docs-dir to render as well, one path or glob per line.
+      Typically README.md.
+    required: false
+    default: ""
+  include:
+    description: >-
+      Files or directories to copy into the site verbatim, one path or glob per
+      line. Use for assets the pages reference.
+    required: false
+    default: ""
+  template:
+    description: >-
+      Pandoc template. Defaults to the shared theme in this repository; set it
+      to a path in your own repository to override.
+    required: false
+    default: ""
+  lua-filters:
+    description: >-
+      Pandoc Lua filters, one path per line. Replaces the shared defaults
+      rather than adding to them.
+    required: false
+    default: ""
+  search:
+    description: >-
+      Add a Search item to the theme's nav. Set this when you also run the
+      index-site action.
+    required: false
+    default: "false"
+  index-from:
+    description: Basename whose page becomes index.html.
+    required: false
+    default: README
+  project:
+    description: Site name, shown in the page title.
+    required: false
+    default: ${{ github.event.repository.name }}
+  repo-url:
+    description: Repository link for the theme's nav.
+    required: false
+    default: ${{ github.server_url }}/${{ github.repository }}
+  pandoc-version:
+    description: Pinned so a Pandoc release cannot change published output.
+    required: false
+    default: 3.8.2.1
+
+runs:
+  using: composite
+  steps:
+    - name: Install Pandoc
+      shell: bash
+      run: |
+        curl -fsSL -o /tmp/pandoc.deb \
+          "https://github.com/jgm/pandoc/releases/download/${{ inputs.pandoc-version }}/pandoc-${{ inputs.pandoc-version }}-1-amd64.deb"
+        sudo dpkg -i /tmp/pandoc.deb
+        pandoc --version | head -n 1
+
+    - name: Render
+      shell: bash
+      env:
+        DOCS_DIR: ${{ inputs.docs-dir }}
+        OUTPUT: ${{ inputs.output }}
+        EXTRA_SOURCES: ${{ inputs.extra-sources }}
+        INCLUDE: ${{ inputs.include }}
+        TEMPLATE: ${{ inputs.template }}
+        LUA_FILTERS: ${{ inputs.lua-filters }}
+        INDEX_FROM: ${{ inputs.index-from }}
+        PROJECT: ${{ inputs.project }}
+        REPO_URL: ${{ inputs.repo-url }}
+        SEARCH: ${{ inputs.search }}
+      run: |
+        ARGS=(--docs-dir "$DOCS_DIR" --output "$OUTPUT" --index-from "$INDEX_FROM")
+        [ -n "$PROJECT" ]  && ARGS+=(--project "$PROJECT")
+        [ -n "$REPO_URL" ] && ARGS+=(--repo-url "$REPO_URL")
+        [ -n "$TEMPLATE" ] && ARGS+=(--template "$TEMPLATE")
+        [ "$SEARCH" = "true" ] && ARGS+=(--search)
+        while IFS= read -r line; do
+          [ -n "$line" ] && ARGS+=(--lua-filter "$line")
+        done <<< "$LUA_FILTERS"
+        while IFS= read -r line; do
+          [ -n "$line" ] && ARGS+=(--extra-source "$line")
+        done <<< "$EXTRA_SOURCES"
+        while IFS= read -r line; do
+          [ -n "$line" ] && ARGS+=(--include "$line")
+        done <<< "$INCLUDE"
+        "${{ github.action_path }}/../../../bin/build-pandoc.sh" "${ARGS[@]}"

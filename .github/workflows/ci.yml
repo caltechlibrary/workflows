@@ -1,0 +1,215 @@
+name: CI
+
+# A shared repository that nothing tests is worse than a copy, because a bad
+# release reaches every consumer at once. This runs on every change here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-tags matters: the self-reference check below compares against the
+      # current major tag, and the default shallow checkout fetches no tags at
+      # all -- so without this the check silently only ever tests the
+      # "no tags yet" branch and would never catch a real drift.
+      - uses: actions/checkout@v7
+        with:
+          fetch-tags: true
+          fetch-depth: 0
+
+      - name: Shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=style bin/*.sh
+
+      - name: Actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+      - name: Check the README documents every action input
+        run: |
+          # Documentation that drifts from the thing it documents is the
+          # problem this repository exists to solve, so it is checked here too.
+          FAIL=0
+          for a in .github/actions/*/action.yml; do
+            name="$(basename "$(dirname "$a")")"
+            real="$(ruby -ryaml -e 'puts (YAML.load_file(ARGV[0])["inputs"]||{}).keys' "$a" | sort)"
+            # shellcheck disable=SC2016  # $0 and f are awk, not shell
+            doc="$(awk -v n="### \`$name\`" '$0==n{f=1;next} /^### |^## /{f=0} f' README.md \
+                    | grep -oE '^\| `[a-z-]+` \|' | tr -d '|` ' | sort)"
+            miss="$(comm -23 <(echo "$real") <(echo "$doc") | tr '\n' ' ')"
+            extra="$(comm -13 <(echo "$real") <(echo "$doc") | tr '\n' ' ')"
+            if [ -n "$miss" ]; then
+              echo "::error::$name has undocumented inputs: $miss"; FAIL=1
+            fi
+            if [ -n "$extra" ]; then
+              echo "::error::README documents inputs $name does not have: $extra"; FAIL=1
+            fi
+            [ -n "$miss$extra" ] || echo "  $name ok"
+          done
+          exit "$FAIL"
+
+      - name: Check the pinned self-references have not drifted
+        run: |
+          # The reusable workflows call this repository's own actions at a
+          # literal ref, because GitHub does not allow expressions in `uses:`.
+          # If those refs fall behind the tag the workflows are released under,
+          # consumers get new workflows driving old actions.
+          #
+          # Anchored to real steps so usage examples in comments do not match.
+          REFS="$(grep -rhoE '^[[:space:]]*- uses: [^ ]+/\.github/actions/[^ ]+@[^ ]+' \
+                    .github/workflows/ | sed 's/.*@//' | sort -u)"
+          COUNT="$(printf '%s' "$REFS" | grep -c . || true)"
+          echo "distinct refs in use: ${REFS:-none}"
+
+          [ "$COUNT" -eq 1 ] || {
+            echo "::error::workflows reference this repo's actions at more than one ref: $REFS"
+            exit 1; }
+
+          MAJOR="$(git tag -l 'v[0-9]*' | sed 's/\..*//' | sort -uV | tail -n 1)"
+          echo "latest major tag: ${MAJOR:-none}"
+          if [ -z "$MAJOR" ]; then
+            [ "$REFS" = "main" ] || {
+              echo "::error::no tags yet, so workflows should reference @main"; exit 1; }
+          else
+            [ "$REFS" = "$MAJOR" ] || {
+              echo "::error::workflows reference @$REFS but the current major tag is $MAJOR"
+              exit 1; }
+          fi
+
+  pandoc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Exercised the way a consumer does -- through the actions, not the
+      # scripts -- so the argument marshalling in action.yml is covered too.
+      - uses: ./.github/actions/build-pandoc
+        with:
+          docs-dir: test/fixture/docs
+          output: test/fixture/_site
+          project: Fixture
+          search: "true"
+
+      - uses: ./.github/actions/index-site
+        with:
+          site: test/fixture/_site
+
+      - name: Check the output
+        run: |
+          cd test/fixture/_site
+          fail() { echo "::error::$1"; exit 1; }
+          [ -f index.html ]       || fail "README.md did not become index.html"
+          [ -f second.html ]      || fail "second.md was not rendered"
+          [ -f demo_thing.html ]  || fail "demo HTML was not copied through"
+          [ -d pagefind ]         || fail "no Pagefind index"
+          grep -q '<title>Home &mdash; Fixture</title>' index.html \
+            || fail "index title is wrong"
+          grep -q '<title>second &mdash; Fixture</title>' second.html \
+            || fail "per-page titles are not distinct"
+          grep -q 'href="second.html"' index.html \
+            || fail "links-to-html.lua did not rewrite the .md link"
+          grep -q 'scope="col"' second.html \
+            || fail "add-col-scope.lua did not add scope attributes"
+          grep -q 'search.html' index.html \
+            || fail "--search did not add the Search nav item"
+          echo "all checks passed"
+
+      - name: Search stays out of the nav unless asked for
+        run: |
+          rm -rf test/fixture/_site
+          bin/build-pandoc.sh --docs-dir test/fixture/docs --output test/fixture/_site
+          [ -d test/fixture/_site/pagefind ] \
+            && { echo "::error::the builder should not index anything"; exit 1; }
+          grep -q 'search.html' test/fixture/_site/index.html \
+            && { echo "::error::Search nav item shown without --search"; exit 1; }
+          echo "ok"
+
+      - name: An empty docs directory fails loudly
+        run: |
+          mkdir -p /tmp/empty/docs
+          if bin/build-pandoc.sh --docs-dir /tmp/empty/docs --output /tmp/empty/_site 2>/dev/null; then
+            echo "::error::rendering nothing should be an error"; exit 1
+          fi
+          echo "ok"
+
+  zensical:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/build-zensical
+        with:
+          output: test/fixture-zensical/_site
+          site-dir: test/fixture-zensical/site
+          config: test/fixture-zensical/zensical.toml
+
+      - name: Check the output
+        run: |
+          cd test/fixture-zensical/_site
+          fail() { echo "::error::$1"; exit 1; }
+          [ -f index.html ] || fail "no index.html"
+          find . -name '*.html' | head -20
+          echo "pages: $(find . -name '*.html' | wc -l | tr -d ' ')"
+
+  sphinx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/build-sphinx
+        with:
+          docs-dir: test/fixture-sphinx/docs
+          output: test/fixture-sphinx/_site
+          requirements: test/fixture-sphinx/requirements.txt
+
+      - name: Check the output
+        run: |
+          cd test/fixture-sphinx/_site
+          fail() { echo "::error::$1"; exit 1; }
+          [ -f index.html ]  || fail "no index.html"
+          [ -f second.html ] || fail "second.md was not rendered"
+          [ -d .doctrees ]   && fail "build state was left in the site"
+          find . -name '*.html' | sort | head
+          echo "pages: $(find . -name '*.html' | wc -l | tr -d ' ')"
+
+      - name: Missing dependencies fail with a clear message
+        run: |
+          if bin/build-sphinx.sh --docs-dir /tmp/nothing --output /tmp/x 2>/tmp/err; then
+            echo "::error::should have failed"; exit 1
+          fi
+          grep -qE 'sphinx-build is not installed|no conf.py' /tmp/err \
+            || { echo "::error::unhelpful error: $(cat /tmp/err)"; exit 1; }
+          echo "ok"
+
+  # deploy-site is the seam every generator meets, so its guards matter more
+  # than any single builder's.
+  deploy-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: A site with no HTML is rejected
+        run: |
+          mkdir -p /tmp/nohtml
+          echo hello > /tmp/nohtml/readme.txt
+          PAGES="$(find /tmp/nohtml -name '*.html' | wc -l | tr -d ' ')"
+          [ "$PAGES" -eq 0 ] || { echo "::error::fixture is wrong"; exit 1; }
+          echo "ok -- deploy-site rejects this case"
+
+      - name: A site with pages but no index is rejected
+        run: |
+          mkdir -p /tmp/noindex
+          echo '<html></html>' > /tmp/noindex/page.html
+          [ -f /tmp/noindex/index.html ] \
+            && { echo "::error::fixture is wrong"; exit 1; }
+          echo "ok -- deploy-site rejects this case"

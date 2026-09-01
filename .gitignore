@@ -1,0 +1,6 @@
+# Build output from the smoke test and from local previews
+_site/
+test/fixture/_site/
+
+# macOS system files
+.DS_Store

@@ -1,0 +1,11 @@
+[project]
+site_url = "https://example.caltech.edu/"
+site_name = "Zensical Fixture"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Second" = "second.md" },
+]
+
+[project.theme]
+language = "en"

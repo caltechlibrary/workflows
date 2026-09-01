@@ -1,0 +1,51 @@
+name: Upload a built site for GitHub Pages
+description: >-
+  Check that a build actually produced a site, then upload it as the Pages
+  artifact. This is the seam every generator meets: whatever built the HTML,
+  everything from here on is the same.
+
+  The deploy itself is not here. actions/deploy-pages needs a job-level
+  `environment:`, which a composite action cannot declare, so it lives in the
+  calling workflow's deploy job or in pages-deploy.yml.
+
+inputs:
+  path:
+    description: Directory holding the built site.
+    required: false
+    default: _site
+  require-index:
+    description: >-
+      Fail if the site has no index.html. A site that builds "successfully"
+      into an empty directory otherwise deploys a 404 over a working one.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Check the build produced something
+      shell: bash
+      env:
+        SITE: ${{ inputs.path }}
+        REQUIRE_INDEX: ${{ inputs.require-index }}
+      run: |
+        [ -d "$SITE" ] || { echo "::error::no such directory: $SITE"; exit 1; }
+        PAGES="$(find "$SITE" -name '*.html' | wc -l | tr -d ' ')"
+        [ "$PAGES" -gt 0 ] || { echo "::error::$SITE contains no HTML"; exit 1; }
+        if [ "$REQUIRE_INDEX" = "true" ] && [ ! -f "$SITE/index.html" ]; then
+          echo "::error::$SITE has no index.html; the site would 404 at its root"
+          exit 1
+        fi
+        {
+          echo "### Site built"
+          echo
+          echo "| | |"
+          echo "|---|---|"
+          echo "| pages | $PAGES |"
+          echo "| total files | $(find "$SITE" -type f | wc -l | tr -d ' ') |"
+          echo "| size | $(du -sh "$SITE" | cut -f1) |"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - uses: actions/upload-pages-artifact@v5
+      with:
+        path: ${{ inputs.path }}

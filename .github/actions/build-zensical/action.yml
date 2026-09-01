@@ -1,0 +1,68 @@
+name: Build docs with Zensical
+description: >-
+  Install Zensical and build a documentation site. Zensical reads zensical.toml
+  or mkdocs.yml, so a project migrating from MkDocs can point this at its
+  existing config. Zensical ships its own search, so index-site is not needed.
+
+inputs:
+  output:
+    description: Where the site should end up, for the shared deploy step.
+    required: false
+    default: _site
+  site-dir:
+    description: >-
+      Where Zensical writes the site. Only change this if the config overrides
+      Zensical's default.
+    required: false
+    default: site
+  config:
+    description: Path to zensical.toml or mkdocs.yml. Auto-detected if unset.
+    required: false
+    default: ""
+  clean:
+    description: Clear the build cache first.
+    required: false
+    default: "true"
+  strict:
+    description: Abort the build on warnings.
+    required: false
+    default: "false"
+  zensical-version:
+    description: >-
+      Pinned deliberately. Zensical is pre-1.0 and shipping every few days, so
+      an unpinned install means absorbing a release you did not choose. Raise
+      this on purpose.
+    required: false
+    default: 0.0.57
+  python-version:
+    description: Python used to install Zensical.
+    required: false
+    default: "3.x"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install Zensical
+      shell: bash
+      run: |
+        pip install "zensical==${{ inputs.zensical-version }}"
+        zensical --version || true
+
+    - name: Build
+      shell: bash
+      env:
+        OUTPUT: ${{ inputs.output }}
+        SITE_DIR: ${{ inputs.site-dir }}
+        CONFIG: ${{ inputs.config }}
+        CLEAN: ${{ inputs.clean }}
+        STRICT: ${{ inputs.strict }}
+      run: |
+        ARGS=(--output "$OUTPUT" --site-dir "$SITE_DIR")
+        [ -n "$CONFIG" ]       && ARGS+=(--config "$CONFIG")
+        [ "$CLEAN"  = "true" ] || ARGS+=(--no-clean)
+        [ "$STRICT" = "true" ] && ARGS+=(--strict)
+        "${{ github.action_path }}/../../../bin/build-zensical.sh" "${ARGS[@]}"

@@ -1,0 +1,130 @@
+name: Build and deploy docs (Pandoc)
+
+# Reusable workflow: renders a Markdown directory with Pandoc and publishes it
+# to GitHub Pages. Call it from a repository like this:
+#
+#   jobs:
+#     docs:
+#       uses: caltechlibrary/workflows/.github/workflows/docs-pandoc.yml@v1
+#       permissions:
+#         contents: read
+#         pages: write
+#         id-token: write
+#
+# Pull requests build but do not deploy, so a change that breaks the docs fails
+# in review rather than after merge.
+#
+# The calling repository needs Settings -> Pages -> Source set to
+# "GitHub Actions" before anything is published.
+#
+# This is the Pandoc path. Sites built with another generator use the matching
+# build action and keep everything downstream:
+#
+#   - uses: caltechlibrary/workflows/.github/actions/build-zensical@v1
+#   - uses: caltechlibrary/workflows/.github/actions/index-site@v1    # optional
+#   - uses: caltechlibrary/workflows/.github/actions/deploy-site@v1
+#
+# NOTE: the `uses:` below is pinned to a literal ref because GitHub does not
+# allow expressions there. It must match the tag this workflow is released
+# under; .github/workflows/ci.yml checks that it does.
+
+on:
+  workflow_call:
+    inputs:
+      docs-dir:
+        description: Directory holding the Markdown sources.
+        type: string
+        required: false
+        default: docs
+      extra-sources:
+        description: Markdown outside docs-dir to render, one path or glob per line.
+        type: string
+        required: false
+        default: ""
+      include:
+        description: Files or directories to copy into the site, one per line.
+        type: string
+        required: false
+        default: ""
+      template:
+        description: Pandoc template. Defaults to the shared Caltech theme.
+        type: string
+        required: false
+        default: ""
+      lua-filters:
+        description: Pandoc Lua filters, one per line. Replaces the defaults.
+        type: string
+        required: false
+        default: ""
+      index-from:
+        description: Basename whose page becomes index.html.
+        type: string
+        required: false
+        default: README
+      pre-build:
+        description: >-
+          Shell command to run before rendering, for projects that must compile
+          something the site publishes. Example: deno task build
+        type: string
+        required: false
+        default: ""
+      pagefind:
+        description: Build a Pagefind search index.
+        type: boolean
+        required: false
+        default: true
+      runs-on:
+        description: Runner label.
+        type: string
+        required: false
+        default: ubuntu-latest
+
+# One deployment at a time; let a running one finish rather than cancelling it
+# part way through a publish.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Pre-build
+        if: inputs.pre-build != ''
+        run: ${{ inputs.pre-build }}
+
+      - uses: caltechlibrary/workflows/.github/actions/build-pandoc@v1
+        with:
+          docs-dir: ${{ inputs.docs-dir }}
+          output: _site
+          extra-sources: ${{ inputs.extra-sources }}
+          include: ${{ inputs.include }}
+          template: ${{ inputs.template }}
+          lua-filters: ${{ inputs.lua-filters }}
+          index-from: ${{ inputs.index-from }}
+          search: ${{ inputs.pagefind }}
+
+      - uses: caltechlibrary/workflows/.github/actions/index-site@v1
+        if: inputs.pagefind
+        with:
+          site: _site
+
+      - uses: caltechlibrary/workflows/.github/actions/deploy-site@v1
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ inputs.runs-on }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+      - name: Summarise the deployment
+        run: echo "Deployed to ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"

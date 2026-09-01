@@ -1,0 +1,90 @@
+name: Build docs with Sphinx
+description: >-
+  Install a project's documentation requirements and build its Sphinx site.
+  Sphinx is sensitive to extension and theme versions, so dependencies come
+  from the project rather than from here.
+
+inputs:
+  docs-dir:
+    description: Directory holding conf.py.
+    required: false
+    default: docs
+  output:
+    description: Where the site should end up, for the shared deploy step.
+    required: false
+    default: _site
+  requirements:
+    description: >-
+      Path to a pip requirements file holding the documentation dependencies.
+      Use this in preference to `packages` -- a file is versioned with the
+      project and works locally too.
+    required: false
+    default: ""
+  packages:
+    description: >-
+      Extra pip packages to install, one per line. For projects that have not
+      collected their doc dependencies into a file yet.
+    required: false
+    default: ""
+  python-version:
+    description: >-
+      Python for the build. Pin it: Sphinx extensions drop old versions without
+      much ceremony, and a floating version turns that into a surprise.
+    required: false
+    default: "3.12"
+  builder:
+    description: Sphinx builder.
+    required: false
+    default: html
+  strict:
+    description: Treat warnings as errors (-W).
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+        # Replaces the upgrade-pip / pip-cache-dir / actions-cache dance that
+        # every hand-written Sphinx workflow in the org currently carries.
+        cache: pip
+
+    - name: Install documentation requirements
+      shell: bash
+      env:
+        REQUIREMENTS: ${{ inputs.requirements }}
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        if [ -z "$REQUIREMENTS" ] && [ -z "$PACKAGES" ]; then
+          echo '::error::set requirements or packages so Sphinx gets installed'
+          exit 1
+        fi
+        if [ -n "$REQUIREMENTS" ]; then
+          [ -f "$REQUIREMENTS" ] || {
+            echo "::error::no such requirements file: $REQUIREMENTS"; exit 1; }
+          python3 -m pip install -r "$REQUIREMENTS"
+        fi
+        if [ -n "$PACKAGES" ]; then
+          declare -a PKGS=()
+          while IFS= read -r line; do
+            [ -n "$line" ] && PKGS+=("$line")
+          done <<< "$PACKAGES"
+          python3 -m pip install "${PKGS[@]}"
+        fi
+        python3 -m pip show sphinx >/dev/null 2>&1 || {
+          echo "::error::sphinx is not installed; add it to your requirements"
+          exit 1; }
+
+    - name: Build
+      shell: bash
+      env:
+        DOCS_DIR: ${{ inputs.docs-dir }}
+        OUTPUT: ${{ inputs.output }}
+        BUILDER: ${{ inputs.builder }}
+        STRICT: ${{ inputs.strict }}
+      run: |
+        ARGS=(--docs-dir "$DOCS_DIR" --output "$OUTPUT" --builder "$BUILDER")
+        [ "$STRICT" = "true" ] && ARGS+=(--strict)
+        "${{ github.action_path }}/../../../bin/build-sphinx.sh" "${ARGS[@]}"

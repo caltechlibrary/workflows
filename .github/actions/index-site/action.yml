@@ -1,0 +1,43 @@
+name: Build a search index
+description: >-
+  Install Pagefind and index an already-built site. Works on output HTML, so it
+  applies to any generator. Generators with their own search -- Zensical,
+  Sphinx -- do not need it.
+
+inputs:
+  site:
+    description: The built site to index.
+    required: false
+    default: _site
+  exclude-selectors:
+    description: >-
+      CSS selectors to keep out of the index, one per line. Defaults to the
+      page chrome, so nav links do not match every search.
+    required: false
+    default: |
+      nav
+      header
+      footer
+  pagefind-version:
+    description: Pinned so a Pagefind release cannot change published output.
+    required: false
+    default: 1.5.2
+
+runs:
+  using: composite
+  steps:
+    - name: Install Pagefind
+      shell: bash
+      run: npm install -g "pagefind@${{ inputs.pagefind-version }}"
+
+    - name: Index
+      shell: bash
+      env:
+        SITE: ${{ inputs.site }}
+        EXCLUDE: ${{ inputs.exclude-selectors }}
+      run: |
+        ARGS=(--site "$SITE")
+        while IFS= read -r line; do
+          [ -n "$line" ] && ARGS+=(--exclude-selector "$line")
+        done <<< "$EXCLUDE"
+        "${{ github.action_path }}/../../../bin/index-site.sh" "${ARGS[@]}"
