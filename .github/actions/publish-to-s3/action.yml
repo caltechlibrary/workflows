@@ -22,8 +22,12 @@ inputs:
     description: S3 bucket name.
     required: true
   prefix:
-    description: Key prefix within the bucket, without leading or trailing slash.
-    required: true
+    description: >-
+      Key prefix within the bucket. Leave empty to publish to the bucket root,
+      which is the shape a project gets when it has a bucket to itself. With no
+      prefix the invalidation covers the whole distribution.
+    required: false
+    default: ""
   sources:
     description: >-
       Directories to upload, one per line. A directory named `dist` uploads to
@@ -38,16 +42,19 @@ inputs:
     default: ""
   acl:
     description: >-
-      Object ACL. Defaults to public-read because the media bucket is in legacy
-      ObjectWriter mode with no bucket policy, so public read comes entirely
-      from per-object ACLs. Set to "none" once a bucket policy exists.
+      Object ACL, or "none" to set none. AWS recommends ACLs disabled and
+      access granted by bucket policy, which is the default here and what new
+      buckets get. A bucket still in legacy ObjectWriter mode with no policy
+      needs "public-read", or its objects upload fine and are unreadable --
+      set public-base-url as well and the action will catch that.
     required: false
-    default: public-read
+    default: none
   public-base-url:
     description: >-
       Public URL the prefix is served from, with a trailing slash. When set,
-      the job summary links every published file. S3 website endpoints have no
-      directory listing, so naming the files is the only way to link them.
+      the job summary links every published file, and after a real publish one
+      of them is fetched to confirm it is readable. S3 website endpoints have
+      no directory listing, so naming the files is the only way to link them.
     required: false
     default: ""
   dry-run:
@@ -72,9 +79,11 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution-id }}
         ACL: ${{ inputs.acl }}
         DRY_RUN: ${{ inputs.dry-run }}
+        BASE_URL: ${{ inputs.public-base-url }}
       run: |
         ARGS=(--bucket "$BUCKET" --prefix "$PREFIX" --acl "$ACL")
         ARGS+=(--manifest "$RUNNER_TEMP/published.txt")
+        [ -n "$BASE_URL" ] && ARGS+=(--verify-url "$BASE_URL")
         [ -n "$DISTRIBUTION" ] && ARGS+=(--distribution "$DISTRIBUTION")
         [ "$DRY_RUN" = "true" ] && ARGS+=(--dry-run)
         while IFS= read -r line; do
@@ -108,6 +117,8 @@ runs:
             sort "$MANIFEST" | head -n 40 | while IFS= read -r key; do
               [ -n "$key" ] && echo "- [\`$key\`](${BASE_URL%/}/$key)"
             done
-            [ "$COUNT" -gt 40 ] && echo "- …and $((COUNT - 40)) more"
+            if [ "$COUNT" -gt 40 ]; then
+              echo "- …and $((COUNT - 40)) more"
+            fi
           fi
         } >> "$GITHUB_STEP_SUMMARY"

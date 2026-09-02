@@ -169,3 +169,37 @@ rejected, which is the part the code cannot tell you.
 
 Adding a generator does not need an ADR. Changing the contract every generator
 satisfies does.
+
+Every change that reaches a consumer gets a `CHANGELOG.md` entry under
+`## [Unreleased]`, following
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Consumers reference a
+moving major tag, so the changelog is the only way they learn what moved.
+
+## Releasing
+
+Entries accumulate under `## [Unreleased]` as pull requests merge. Releasing is
+a separate, deliberate step — one commit and one tag per release, not per
+change.
+
+1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, and add a fresh empty
+   `## [Unreleased]` above it.
+2. Update the link references at the bottom of `CHANGELOG.md`.
+3. Commit that on its own: `Release X.Y.Z`.
+4. Tag that commit: `git tag -a vX.Y.Z -m "vX.Y.Z — <summary>"`.
+5. Move the major tag: `git tag -f vX` and force-push it.
+6. Push the commit and both tags.
+
+Tagging the release commit means the tag points at a changelog that describes
+itself, rather than one still saying "Unreleased".
+
+Choosing the number, per
+[ADR-0006](docs/decisions/0006-version-with-moving-major-tags.md):
+
+| Change | |
+| --- | --- |
+| An input renamed or removed, an action path changed, **a default changed** | major |
+| A new action or input, backward compatible | minor |
+| A fix with no interface change | patch |
+
+Changing a default is breaking even though nothing in the interface moved:
+existing callers get different behavior without editing anything.
