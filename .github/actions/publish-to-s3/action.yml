@@ -51,7 +51,11 @@ inputs:
     default: none
   public-base-url:
     description: >-
-      Public URL the prefix is served from, with a trailing slash. When set,
+      Public URL serving the published objects, with a trailing slash. It is
+      not derived from bucket or prefix: a bucket name need not resemble the
+      hostname in front of it, and a CloudFront behavior can serve a prefix
+      under a different path. It only has to serve the same relative structure
+      the prefix does. When set,
       the job summary links every published file, and after a real publish one
       of them is fetched to confirm it is readable. S3 website endpoints have
       no directory listing, so naming the files is the only way to link them.

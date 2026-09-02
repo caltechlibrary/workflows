@@ -138,6 +138,12 @@ Every build action writes a directory of static HTML to `output` with an
 `index.html` at its root. That is the only thing the rest of the pipeline
 depends on, which is why swapping generators is a one-action change.
 
+**A build action's `output` and `deploy-site`'s `path` must be the same
+directory.** Both default to `_site`, so the coupling is invisible until you
+change one — change the other too. By contrast, `prefix` and the path in
+`public-base-url` need not correspond at all; they match in some deployments by
+coincidence.
+
 ### `build-pandoc`
 
 | Input | Default | |
@@ -209,7 +215,7 @@ work for another until an entry is added.
 | `sources` | `dist`, `css` | Directories to upload, one per line. `dist` uploads to the prefix root |
 | `distribution-id` | — | CloudFront distribution to invalidate; omit to skip |
 | `acl` | `none` | AWS recommends ACLs disabled. Set to `public-read` for a legacy bucket with no policy |
-| `public-base-url` | — | Public URL the prefix is served from. When set, the summary links every published file and one is fetched afterwards to confirm it is readable |
+| `public-base-url` | — | Public URL serving the published objects. When set, the summary links every published file and one is fetched afterwards to confirm it is readable |
 | `dry-run` | `false` | Show what would happen and change nothing |
 
 Run it with `dry-run: true` first. It refuses to publish an empty or missing
@@ -219,6 +225,13 @@ leave the CDN serving stale objects with no signal.
 Content types are set explicitly per extension rather than left to the CLI's
 guess, which omits the charset and can differ between CLI versions — otherwise
 what the CDN serves could change for files nobody edited.
+
+`public-base-url` is given whole rather than built from `bucket` and `prefix`,
+because neither determines it. A bucket name need not resemble the hostname in
+front of it, and a CloudFront behavior or function can serve a prefix under a
+different path. The only requirement is that the URL serves the same relative
+structure the prefix does — `prefix: assets` published to a distribution that
+maps `/static/*` to it would set `public-base-url` ending in `/static/`.
 
 The `acl` default follows AWS's recommendation: ACLs disabled, access granted
 by bucket policy. A bucket still in legacy `ObjectWriter` mode with no policy

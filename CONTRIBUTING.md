@@ -132,6 +132,14 @@ project rather than to this repository.
 - **Make assumptions explicit.** If an action needs `docs/` to exist, that
   should be an input with a default, not an unstated requirement.
 
+- **Say which repeated values must match.** When an example shows the same
+  string twice, a reader cannot tell whether that is required or a
+  coincidence, and both guesses cause bugs. A build action's `output` and
+  `deploy-site`'s `path` **must** be the same directory; `prefix` and the path
+  in `public-base-url` **need not** correspond. Shared defaults make this
+  worse, not better: two inputs that both default to `_site` look independent
+  until someone changes one.
+
 - **Say what was dropped.** If a build skips or truncates something, log it.
   Silent truncation reads as "covered everything" when it did not.
 

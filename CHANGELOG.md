@@ -12,6 +12,17 @@ what moved. See
 
 ## [Unreleased]
 
+### Changed
+
+- Documented which repeated values in examples must match and which are
+  coincidental: a build action's `output` and `deploy-site`'s `path` must be
+  the same directory, while `prefix` and the path in `public-base-url` need
+  not correspond.
+- Documented that `public-base-url` is independent of `bucket` and `prefix`.
+  A bucket name need not resemble the hostname in front of it, and a
+  CloudFront behavior can serve a prefix under a different path; the only
+  requirement is that the URL serves the same relative structure.
+
 ## [1.1.0] - 2026-09-01
 
 ### Added
