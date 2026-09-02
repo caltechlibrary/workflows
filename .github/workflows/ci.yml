@@ -191,6 +191,49 @@ jobs:
             || { echo "::error::unhelpful error: $(cat /tmp/err)"; exit 1; }
           echo "ok"
 
+  publish-to-s3-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # No AWS credentials here on purpose: this repository should not hold
+      # any. What is testable without them is the argument handling and the
+      # guards, which are where the damage would be.
+      - name: Required arguments are enforced
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          bin/publish-to-s3.sh 2>/dev/null && fail "should require --bucket"
+          bin/publish-to-s3.sh --bucket b 2>/dev/null && fail "should require --prefix"
+          bin/publish-to-s3.sh --bucket b --prefix p 2>/dev/null && fail "should require --source"
+          echo "ok"
+
+      - name: An empty prefix publishes to the bucket root
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          mkdir -p /tmp/pfx/dist && touch /tmp/pfx/dist/a.js
+          printf '#!/bin/sh\nexit 0\n' > /tmp/aws && chmod +x /tmp/aws
+          out="$(PATH=/tmp:$PATH bin/publish-to-s3.sh --bucket b --source /tmp/pfx/dist \
+                   --distribution E1 --dry-run 2>&1)"
+          echo "$out" | grep -q 's3://b/$'  || fail "no prefix should target the bucket root, got: $out"
+          echo "$out" | grep -q 'invalidate /\* ' || fail "no prefix should invalidate /*"
+          echo "$out" | grep -q 'no prefix, so this invalidates the whole distribution' \
+            || fail "should say so when invalidating everything"
+          # and a prefix with stray slashes is normalized
+          out="$(PATH=/tmp:$PATH bin/publish-to-s3.sh --bucket b --prefix /wrapped/ \
+                   --source /tmp/pfx/dist --distribution E1 --dry-run 2>&1)"
+          echo "$out" | grep -q 's3://b/wrapped/$' || fail "stray slashes not normalized: $out"
+          echo ok
+
+      - name: An empty or missing source is refused
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          mkdir -p /tmp/empty-dist
+          bin/publish-to-s3.sh --bucket b --prefix p --source /tmp/empty-dist 2>/dev/null \
+            && fail "publishing an empty directory should be an error"
+          bin/publish-to-s3.sh --bucket b --prefix p --source /tmp/nope 2>/dev/null \
+            && fail "a missing directory should be an error"
+          echo "ok"
+
   # deploy-site is the seam every generator meets, so its guards matter more
   # than any single builder's.
   deploy-guards:

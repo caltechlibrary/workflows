@@ -26,6 +26,7 @@ decision instead of a rewrite.
 | `build-sphinx` | Sphinx, using the project's own documentation requirements |
 | `index-site` | Pagefind search index over built HTML — works with any generator |
 | `deploy-site` | Checks the build produced a real site, uploads it for Pages |
+| `publish-to-s3` | Uploads built assets to S3 over OIDC and invalidates CloudFront |
 
 Adding a generator means one new `build-*` action; nothing downstream changes.
 
@@ -190,6 +191,54 @@ rather than at `sphinx-build` with a confusing error.
 
 Skip this for generators with their own search.
 
+### `publish-to-s3`
+
+Authenticates with OIDC, so no long-lived AWS keys exist anywhere. The calling
+job must declare `permissions: id-token: write` — a composite action cannot.
+
+The role's trust policy has to name the **calling repository's** subject claim.
+That claim is repo-specific, so a role that works for one repository will not
+work for another until an entry is added.
+
+| Input | Default | |
+| --- | --- | --- |
+| `role-to-assume` | — | ARN of the role to assume via OIDC |
+| `aws-region` | `us-west-2` | |
+| `bucket` | — | S3 bucket name |
+| `prefix` | — | Key prefix within the bucket. Leave empty to publish to the bucket root |
+| `sources` | `dist`, `css` | Directories to upload, one per line. `dist` uploads to the prefix root |
+| `distribution-id` | — | CloudFront distribution to invalidate; omit to skip |
+| `acl` | `none` | AWS recommends ACLs disabled. Set to `public-read` for a legacy bucket with no policy |
+| `public-base-url` | — | Public URL the prefix is served from. When set, the summary links every published file and one is fetched afterwards to confirm it is readable |
+| `dry-run` | `false` | Show what would happen and change nothing |
+
+Run it with `dry-run: true` first. It refuses to publish an empty or missing
+source directory, because a build that "succeeds" into nothing would otherwise
+leave the CDN serving stale objects with no signal.
+
+Content types are set explicitly per extension rather than left to the CLI's
+guess, which omits the charset and can differ between CLI versions — otherwise
+what the CDN serves could change for files nobody edited.
+
+The `acl` default follows AWS's recommendation: ACLs disabled, access granted
+by bucket policy. A bucket still in legacy `ObjectWriter` mode with no policy
+needs `acl: public-read` — without it, objects upload successfully and are
+unreadable. Setting `public-base-url` catches that: after a real publish one
+file is fetched, and a 403 fails the job.
+
+With no `prefix`, files go to the bucket root and the invalidation covers the
+whole distribution — correct when the bucket belongs to one project, wrong when
+it is shared. The script says so when it happens.
+
+S3 website endpoints serve no directory listing — a URL ending in `/` returns
+404 rather than an index — so the summary names each published file instead of
+linking a parent directory. Set `public-base-url` to turn those into links.
+
+It uses `aws s3 cp`, **not `sync --delete`**. Buckets often hold objects the
+publishing repository does not manage, and a delete-enabled sync would remove
+them with nothing to put them back. See
+[ADR-0007](docs/decisions/0007-publish-without-destroying-what-you-did-not-create.md).
+
 ### `deploy-site`
 
 | Input | Default | |
@@ -243,6 +292,10 @@ documentation requirements for `build-sphinx.sh`, and
 [Pagefind](https://pagefind.app/) for `index-site.sh`.
 
 ## Versioning
+
+Changes are recorded in [CHANGELOG.md](CHANGELOG.md), following
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Because `@v1` moves,
+that file is how you find out what moved.
 
 Reference a **major tag**:
 
