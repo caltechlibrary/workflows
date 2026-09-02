@@ -26,6 +26,7 @@ decision instead of a rewrite.
 | `build-sphinx` | Sphinx, using the project's own documentation requirements |
 | `index-site` | Pagefind search index over built HTML — works with any generator |
 | `deploy-site` | Checks the build produced a real site, uploads it for Pages |
+| `publish-to-s3` | Uploads built assets to S3 over OIDC and invalidates CloudFront |
 
 Adding a generator means one new `build-*` action; nothing downstream changes.
 
@@ -189,6 +190,43 @@ rather than at `sphinx-build` with a confusing error.
 | `pagefind-version` | `1.5.2` | Pinned |
 
 Skip this for generators with their own search.
+
+### `publish-to-s3`
+
+Authenticates with OIDC, so no long-lived AWS keys exist anywhere. The calling
+job must declare `permissions: id-token: write` — a composite action cannot.
+
+The role's trust policy has to name the **calling repository's** subject claim.
+That claim is repo-specific, so a role that works for one repository will not
+work for another until an entry is added.
+
+| Input | Default | |
+| --- | --- | --- |
+| `role-to-assume` | — | ARN of the role to assume via OIDC |
+| `aws-region` | `us-west-2` | |
+| `bucket` | — | S3 bucket name |
+| `prefix` | — | Key prefix within the bucket |
+| `sources` | `dist`, `css` | Directories to upload, one per line. `dist` uploads to the prefix root |
+| `distribution-id` | — | CloudFront distribution to invalidate; omit to skip |
+| `acl` | `public-read` | Set to `none` once the bucket has a policy instead of per-object ACLs |
+| `public-base-url` | — | Public URL the prefix is served from. When set, the job summary links every published file |
+| `dry-run` | `false` | Show what would happen and change nothing |
+
+Run it with `dry-run: true` first. It refuses to publish an empty or missing
+source directory, because a build that "succeeds" into nothing would otherwise
+leave the CDN serving stale objects with no signal.
+
+Content types are set explicitly per extension rather than left to the CLI's
+guess, which omits the charset and can differ between CLI versions — otherwise
+what the CDN serves could change for files nobody edited.
+
+S3 website endpoints serve no directory listing — a URL ending in `/` returns
+404 rather than an index — so the summary names each published file instead of
+linking a parent directory. Set `public-base-url` to turn those into links.
+
+It uses `aws s3 cp`, **not `sync --delete`**. Buckets often hold objects the
+publishing repository does not manage, and a delete-enabled sync would remove
+them. Check what else lives under the prefix before changing that.
 
 ### `deploy-site`
 
