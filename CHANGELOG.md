@@ -12,6 +12,8 @@ what moved. See
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-02
+
 ### Added
 
 - The Pandoc theme's own CSS and JS now live here, in `pandoc/css` and
@@ -34,6 +36,10 @@ what moved. See
   `caltechlibrary.github.io` acting as an asset host; the S3 copies were
   thirteen months stale. `footer-global.js` and the Caltech Library logo keep
   their CDN URLs, because sites outside this build system embed them.
+- **If you use the shared template and your site is served at a domain root,
+  set `site-base: /`.** The default is `/<repo>/`, which is correct for a
+  GitHub Pages project site. Left wrong, the theme's stylesheets 404 and the
+  site loses its styling.
 - Documented which repeated values in examples must match and which are
   coincidental: a build action's `output` and `deploy-site`'s `path` must be
   the same directory, while `prefix` and the path in `public-base-url` need
@@ -81,6 +87,7 @@ what moved. See
 - The shared Caltech Pandoc theme in `pandoc/`, overridable per project.
 - Architecture decision records in `docs/decisions/`.
 
-[Unreleased]: https://github.com/caltechlibrary/workflows/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/caltechlibrary/workflows/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/caltechlibrary/workflows/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/caltechlibrary/workflows/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/caltechlibrary/workflows/releases/tag/v1.0.0
