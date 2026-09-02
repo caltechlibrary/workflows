@@ -191,6 +191,32 @@ jobs:
             || { echo "::error::unhelpful error: $(cat /tmp/err)"; exit 1; }
           echo "ok"
 
+  publish-to-s3-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # No AWS credentials here on purpose: this repository should not hold
+      # any. What is testable without them is the argument handling and the
+      # guards, which are where the damage would be.
+      - name: Required arguments are enforced
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          bin/publish-to-s3.sh 2>/dev/null && fail "should require --bucket"
+          bin/publish-to-s3.sh --bucket b 2>/dev/null && fail "should require --prefix"
+          bin/publish-to-s3.sh --bucket b --prefix p 2>/dev/null && fail "should require --source"
+          echo "ok"
+
+      - name: An empty or missing source is refused
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          mkdir -p /tmp/empty-dist
+          bin/publish-to-s3.sh --bucket b --prefix p --source /tmp/empty-dist 2>/dev/null \
+            && fail "publishing an empty directory should be an error"
+          bin/publish-to-s3.sh --bucket b --prefix p --source /tmp/nope 2>/dev/null \
+            && fail "a missing directory should be an error"
+          echo "ok"
+
   # deploy-site is the seam every generator meets, so its guards matter more
   # than any single builder's.
   deploy-guards:
