@@ -254,7 +254,7 @@ work for another until an entry is added.
 | `distribution-id` | — | CloudFront distribution to invalidate; omit to skip |
 | `acl` | `none` | AWS recommends ACLs disabled. Set to `public-read` for a legacy bucket with no policy |
 | `public-base-url` | — | Public URL serving the published objects. When set, the summary links every published file and one is fetched afterwards to confirm it is readable |
-| `dry-run` | `false` | Show what would happen and change nothing |
+| `dry-run` | `false` | Dry run. Show what would be uploaded and invalidated, and change nothing |
 
 Run it with `dry-run: true` first. It refuses to publish an empty or missing
 source directory, because a build that "succeeds" into nothing would otherwise

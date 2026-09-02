@@ -12,6 +12,13 @@ what moved. See
 
 ## [Unreleased]
 
+### Changed
+
+- `publish-to-s3`'s `dry-run` description now says "dry run". It described the
+  behavior without naming it, so anyone scanning for the term — including in a
+  `workflow_dispatch` checkbox, where GitHub shows only the description — did
+  not find it.
+
 ## [1.2.0] - 2026-09-02
 
 ### Added
