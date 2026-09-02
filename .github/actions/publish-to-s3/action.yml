@@ -62,7 +62,7 @@ inputs:
     required: false
     default: ""
   dry-run:
-    description: Show what would be uploaded and invalidated, and change nothing.
+    description: Dry run. Show what would be uploaded and invalidated, and change nothing.
     required: false
     default: "false"
 
