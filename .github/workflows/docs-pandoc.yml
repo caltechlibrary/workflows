@@ -56,6 +56,25 @@ on:
         type: string
         required: false
         default: ""
+      site-base:
+        description: >-
+          URL prefix the site is served under. Defaults to /<repo>/. Set it to /
+          for a site served at a domain root.
+        type: string
+        required: false
+        default: ""
+      extra-css:
+        description: >-
+          Stylesheets to ship and load after the theme's, one path per line.
+        type: string
+        required: false
+        default: ""
+      extra-js:
+        description: >-
+          Scripts to ship and load after the theme's, one path per line.
+        type: string
+        required: false
+        default: ""
       index-from:
         description: Basename whose page becomes index.html.
         type: string
@@ -103,6 +122,9 @@ jobs:
           include: ${{ inputs.include }}
           template: ${{ inputs.template }}
           lua-filters: ${{ inputs.lua-filters }}
+          site-base: ${{ inputs.site-base || format('/{0}/', github.event.repository.name) }}
+          extra-css: ${{ inputs.extra-css }}
+          extra-js: ${{ inputs.extra-js }}
           index-from: ${{ inputs.index-from }}
           search: ${{ inputs.pagefind }}
 

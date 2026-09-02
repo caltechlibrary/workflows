@@ -37,6 +37,26 @@ inputs:
       rather than adding to them.
     required: false
     default: ""
+  site-base:
+    description: >-
+      URL prefix the site is served under, used for the theme's own CSS and JS.
+      Defaults to /<repo>/, which is where GitHub Pages puts a project site. Set
+      it to / for a site served at a domain root.
+    required: false
+    default: /${{ github.event.repository.name }}/
+  extra-css:
+    description: >-
+      Stylesheets to ship with the site and load after the theme's, one path per
+      line. Later rules win, so this is enough to restyle anything the theme
+      does without forking it.
+    required: false
+    default: ""
+  extra-js:
+    description: >-
+      Scripts to ship with the site and load after the theme's, one path per
+      line.
+    required: false
+    default: ""
   search:
     description: >-
       Add a Search item to the theme's nav. Set this when you also run the
@@ -84,6 +104,9 @@ runs:
         PROJECT: ${{ inputs.project }}
         REPO_URL: ${{ inputs.repo-url }}
         SEARCH: ${{ inputs.search }}
+        SITE_BASE: ${{ inputs.site-base }}
+        EXTRA_CSS: ${{ inputs.extra-css }}
+        EXTRA_JS: ${{ inputs.extra-js }}
       run: |
         ARGS=(--docs-dir "$DOCS_DIR" --output "$OUTPUT" --index-from "$INDEX_FROM")
         [ -n "$PROJECT" ]  && ARGS+=(--project "$PROJECT")
@@ -99,4 +122,11 @@ runs:
         while IFS= read -r line; do
           [ -n "$line" ] && ARGS+=(--include "$line")
         done <<< "$INCLUDE"
+        [ -n "$SITE_BASE" ] && ARGS+=(--site-base "$SITE_BASE")
+        while IFS= read -r line; do
+          [ -n "$line" ] && ARGS+=(--extra-css "$line")
+        done <<< "$EXTRA_CSS"
+        while IFS= read -r line; do
+          [ -n "$line" ] && ARGS+=(--extra-js "$line")
+        done <<< "$EXTRA_JS"
         "${{ github.action_path }}/../../../bin/build-pandoc.sh" "${ARGS[@]}"
