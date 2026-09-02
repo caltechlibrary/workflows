@@ -66,6 +66,9 @@ but do not deploy it.
 | `include` | — | Files or directories to copy into the site verbatim, one per line |
 | `template` | shared theme | Pandoc template; point at a file in your repo to override |
 | `lua-filters` | shared filters | One path per line. **Replaces** the defaults rather than adding to them |
+| `site-base` | `/<repo>/` | URL prefix the site is served under. Set it to `/` for a domain root |
+| `extra-css` | — | Stylesheets shipped and loaded **after** the theme's, one per line |
+| `extra-js` | — | Scripts shipped and loaded after the theme's, one per line |
 | `index-from` | `README` | Basename whose page becomes `index.html` |
 | `pre-build` | — | Shell command to run before rendering, e.g. `deno task build` |
 | `pagefind` | `true` | Build a Pagefind search index |
@@ -154,11 +157,46 @@ coincidence.
 | `include` | — | Files or directories copied in verbatim, one per line |
 | `template` | shared theme | Pandoc template; point at your own file to override |
 | `lua-filters` | shared filters | One per line. **Replaces** the defaults |
+| `site-base` | `/<repo>/` | URL prefix the site is served under. Set it to `/` for a domain root |
+| `extra-css` | — | Stylesheets shipped and loaded **after** the theme's, one per line |
+| `extra-js` | — | Scripts shipped and loaded after the theme's, one per line |
 | `index-from` | `README` | Basename that becomes `index.html` |
 | `search` | `false` | Add a Search item to the nav — set it when you also run `index-site` |
 | `project` | repository name | Shown in the page title |
 | `repo-url` | this repository | Link in the theme's nav |
 | `pandoc-version` | `3.8.2.1` | Pinned so a Pandoc release cannot change published output |
+
+#### Customizing the theme
+
+The theme's stylesheets and scripts live in `pandoc/css` and `pandoc/js` here,
+and are copied into every site this action builds. A published site serves them
+itself; it does not fetch them from anywhere else. Updating them for everyone is
+a change here plus a move of `v1`.
+
+To change how a site looks, **add** rather than replace:
+
+```yaml
+- uses: caltechlibrary/workflows/.github/actions/build-pandoc@v1
+  with:
+    extra-css: pandoc/css/my-project.css
+```
+
+Your file ships alongside the theme's and loads after them, so a rule in it
+beats the theme's rule for the same selector. That is enough to restyle
+anything the theme does without copying a theme file into your repository —
+and a copy you do not have is a copy that cannot fall behind.
+
+Naming your file the same as a theme file replaces it instead. That works,
+but it is a fork; prefer a new name.
+
+`site-base` prefixes the URLs of both. It defaults to `/<repo>/`, where GitHub
+Pages puts a project site. A site served at a domain root sets `site-base: /`.
+Running `bin/build-pandoc.sh` by hand with no `--site-base` emits relative URLs,
+so the output opens correctly straight from disk.
+
+For a page structure the theme does not offer, `template` still points Pandoc at
+your own file. That opts you out of future changes to the shared template, which
+is the trade you are making.
 
 ### `build-zensical`
 

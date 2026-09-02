@@ -4,9 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>$title$$if(project)$ &mdash; $project$$endif$</title>
-    <link rel="stylesheet" href="https://caltechlibrary.github.io/css/site.css">
-    <link rel="stylesheet" href="https://media.library.caltech.edu/cl-webcomponents/css/code-blocks.css">
-    <script type="module" src="https://media.library.caltech.edu/cl-webcomponents/copyToClipboard.js"></script>
+    <link rel="stylesheet" href="$site-base$css/site.css">
+    <link rel="stylesheet" href="$site-base$css/code-blocks.css">
+$for(extra-css)$
+    <link rel="stylesheet" href="$site-base$css/$extra-css$">
+$endfor$
+    <script type="module" src="$site-base$js/copyToClipboard.js"></script>
+$for(extra-js)$
+    <script type="module" src="$site-base$js/$extra-js$"></script>
+$endfor$
     <script type="module" src="https://media.library.caltech.edu/cl-webcomponents/footer-global.js"></script>
 </head>
 <body>

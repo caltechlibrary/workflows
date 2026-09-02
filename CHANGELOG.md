@@ -12,8 +12,28 @@ what moved. See
 
 ## [Unreleased]
 
+### Added
+
+- The Pandoc theme's own CSS and JS now live here, in `pandoc/css` and
+  `pandoc/js`, and are copied into every site `build-pandoc` builds. A
+  published site serves them itself instead of fetching them from another
+  project's CDN. See
+  [ADR-0008](docs/decisions/0008-ship-the-themes-assets-with-the-site.md).
+- `build-pandoc` inputs `extra-css` and `extra-js`: files a project ships with
+  its site and loads *after* the theme's. For CSS that is enough to restyle
+  anything the theme does, because later rules win, so no project needs a copy
+  of a theme file.
+- `build-pandoc` input `site-base`, the URL prefix those assets are served
+  under. Defaults to `/<repo>/`; set it to `/` for a site at a domain root.
+
 ### Changed
 
+- The shared template no longer fetches `site.css`, `code-blocks.css` or
+  `copyToClipboard.js` by absolute URL. Those had made every documentation site
+  depend on `CL-web-components` publishing to S3 and on
+  `caltechlibrary.github.io` acting as an asset host; the S3 copies were
+  thirteen months stale. `footer-global.js` and the Caltech Library logo keep
+  their CDN URLs, because sites outside this build system embed them.
 - Documented which repeated values in examples must match and which are
   coincidental: a build action's `output` and `deploy-site`'s `path` must be
   the same directory, while `prefix` and the path in `public-base-url` need
