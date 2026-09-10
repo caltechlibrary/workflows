@@ -12,6 +12,22 @@ what moved. See
 
 ## [Unreleased]
 
+### Removed
+
+- `create-release`'s `notes-file` input, and `--notes-file` from
+  `bin/create-release.sh`. Notes are written when the draft is published: the
+  release editor is a real text area with a preview, in front of the draft
+  being reviewed, and whoever passes notes in is the same person about to open
+  it. Passing them in also means collecting them in a `workflow_dispatch`
+  input, which is a single-line box showing barely a phrase.
+
+  **Released as a minor by exception.** Removing an input is a major change by
+  [ADR-0006](docs/decisions/0006-version-with-moving-major-tags.md). This
+  input shipped in 1.3.0 earlier the same day, and the only consumer of the
+  action is changing in lockstep to stop passing it, so no caller breaks. The
+  exception holds while these actions are in heavy development and have no
+  outside users; once they do, the rule applies as written.
+
 ## [1.3.0] - 2026-09-10
 
 ### Added
