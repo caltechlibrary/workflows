@@ -11,12 +11,6 @@ inputs:
     description: Release title. Defaults to the tag.
     required: false
     default: ""
-  notes-file:
-    description: >-
-      Markdown file prepended to GitHub's generated notes. Use it for the one
-      or two sentences a human wrote about this release.
-    required: false
-    default: ""
   target:
     description: >-
       Commit to tag. Defaults to HEAD. Tag the commit that already has the
@@ -49,7 +43,6 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         TAG: ${{ inputs.tag }}
         TITLE: ${{ inputs.title }}
-        NOTES_FILE: ${{ inputs.notes-file }}
         TARGET: ${{ inputs.target }}
         ARTIFACTS: ${{ inputs.artifacts }}
         GENERATE_NOTES: ${{ inputs.generate-notes }}
@@ -57,7 +50,6 @@ runs:
       run: |
         ARGS=(--tag "$TAG")
         [ -n "$TITLE" ] && ARGS+=(--title "$TITLE")
-        [ -n "$NOTES_FILE" ] && ARGS+=(--notes-file "$NOTES_FILE")
         [ -n "$TARGET" ] && ARGS+=(--target "$TARGET")
         [ "$GENERATE_NOTES" = "false" ] && ARGS+=(--no-generate-notes)
         [ "$DRY_RUN" = "true" ] && ARGS+=(--dry-run)

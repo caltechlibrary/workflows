@@ -312,7 +312,6 @@ your own deploy job, or use a `docs-*.yml` reusable workflow.
 | --- | --- | --- |
 | `tag` | — | Tag to create, e.g. `v1.2.3` (required) |
 | `title` | the tag | Release title |
-| `notes-file` | — | Markdown prepended to the generated notes |
 | `target` | `HEAD` | Commit to tag |
 | `artifacts` | — | Files to attach, one path per line |
 | `generate-notes` | `true` | Include GitHub's commit-derived notes |
@@ -323,6 +322,10 @@ your own deploy job, or use a `docs-*.yml` reusable workflow.
 checks the artifacts, and presses the button. Nothing here publishes, and
 nothing here decides a version — the caller has already bumped whatever holds
 it and committed that.
+
+**Notes are written when the draft is published.** The draft opens with
+GitHub's generated commit list; whoever publishes it adds prose above that in
+the release editor.
 
 `target` matters when the release follows a metadata regeneration. Tag the
 commit that has the regenerated files, not the one that only bumped the
