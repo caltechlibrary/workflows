@@ -12,6 +12,13 @@ what moved. See
 
 ## [Unreleased]
 
+### Added
+
+- `create-release` action and `bin/create-release.sh`: tag a commit and open a
+  **draft** GitHub release with artifacts attached. Publishing stays a human
+  act. It refuses to run if the tag or release already exists, and fails on an
+  artifact that is missing or zero bytes.
+
 ### Changed
 
 - `publish-to-s3`'s `dry-run` description now says "dry run". It described the

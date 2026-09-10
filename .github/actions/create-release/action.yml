@@ -1,0 +1,67 @@
+name: Create a draft release
+description: >-
+  Tag a commit and open a draft GitHub release with artifacts attached.
+  Always a draft: publishing stays a human act.
+
+inputs:
+  tag:
+    description: Tag to create, e.g. v1.2.3.
+    required: true
+  title:
+    description: Release title. Defaults to the tag.
+    required: false
+    default: ""
+  notes-file:
+    description: >-
+      Markdown file prepended to GitHub's generated notes. Use it for the one
+      or two sentences a human wrote about this release.
+    required: false
+    default: ""
+  target:
+    description: >-
+      Commit to tag. Defaults to HEAD. Tag the commit that already has the
+      regenerated files, not the one that only bumped the version.
+    required: false
+    default: ""
+  artifacts:
+    description: Files to attach, one path per line.
+    required: false
+    default: ""
+  generate-notes:
+    description: Include GitHub's commit-derived notes.
+    required: false
+    default: "true"
+  dry-run:
+    description: Dry run. Show what would be created, and change nothing.
+    required: false
+    default: "false"
+  token:
+    description: Token gh authenticates with.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Create the draft
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        TAG: ${{ inputs.tag }}
+        TITLE: ${{ inputs.title }}
+        NOTES_FILE: ${{ inputs.notes-file }}
+        TARGET: ${{ inputs.target }}
+        ARTIFACTS: ${{ inputs.artifacts }}
+        GENERATE_NOTES: ${{ inputs.generate-notes }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        ARGS=(--tag "$TAG")
+        [ -n "$TITLE" ] && ARGS+=(--title "$TITLE")
+        [ -n "$NOTES_FILE" ] && ARGS+=(--notes-file "$NOTES_FILE")
+        [ -n "$TARGET" ] && ARGS+=(--target "$TARGET")
+        [ "$GENERATE_NOTES" = "false" ] && ARGS+=(--no-generate-notes)
+        [ "$DRY_RUN" = "true" ] && ARGS+=(--dry-run)
+        while IFS= read -r line; do
+          [ -n "$line" ] && ARGS+=(--artifact "$line")
+        done <<< "$ARTIFACTS"
+        "${{ github.action_path }}/../../../bin/create-release.sh" "${ARGS[@]}"

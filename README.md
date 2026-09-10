@@ -27,6 +27,7 @@ decision instead of a rewrite.
 | `index-site` | Pagefind search index over built HTML — works with any generator |
 | `deploy-site` | Checks the build produced a real site, uploads it for Pages |
 | `publish-to-s3` | Uploads built assets to S3 over OIDC and invalidates CloudFront |
+| `create-release` | Tags a commit and opens a draft GitHub release with artifacts |
 
 Adding a generator means one new `build-*` action; nothing downstream changes.
 
@@ -305,6 +306,32 @@ The deploy itself is not in this action: `actions/deploy-pages` needs a
 job-level `environment:`, which a composite action cannot declare. Put it in
 your own deploy job, or use a `docs-*.yml` reusable workflow.
 
+### `create-release`
+
+| Input | Default | |
+| --- | --- | --- |
+| `tag` | — | Tag to create, e.g. `v1.2.3` (required) |
+| `title` | the tag | Release title |
+| `notes-file` | — | Markdown prepended to the generated notes |
+| `target` | `HEAD` | Commit to tag |
+| `artifacts` | — | Files to attach, one path per line |
+| `generate-notes` | `true` | Include GitHub's commit-derived notes |
+| `dry-run` | `false` | Dry run. Show what would be created, and change nothing |
+| `token` | `github.token` | Token `gh` authenticates with |
+
+**Always a draft.** Publishing stays a human act: someone reads the notes,
+checks the artifacts, and presses the button. Nothing here publishes, and
+nothing here decides a version — the caller has already bumped whatever holds
+it and committed that.
+
+`target` matters when the release follows a metadata regeneration. Tag the
+commit that has the regenerated files, not the one that only bumped the
+version, or the archive ships metadata describing the previous release.
+
+It refuses to run if the tag or the release already exists, and it fails on an
+artifact that is missing or zero bytes — a release whose files are empty looks
+fine until someone downloads one.
+
 ## Adding a generator
 
 One new action; nothing downstream changes. The contract every builder
@@ -340,7 +367,10 @@ Every script takes `--help`.
 You need [Pandoc](https://pandoc.org/) for `build-pandoc.sh`,
 [Zensical](https://zensical.org/) for `build-zensical.sh`, your project's
 documentation requirements for `build-sphinx.sh`, and
-[Pagefind](https://pagefind.app/) for `index-site.sh`.
+[Pagefind](https://pagefind.app/) for `index-site.sh`. `create-release.sh`
+needs the [`gh` CLI](https://cli.github.com/), already authenticated as
+yourself; `publish-to-s3.sh` needs the AWS CLI and whatever profile you
+normally use.
 
 ## Versioning
 
