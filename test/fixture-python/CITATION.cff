@@ -1,0 +1,6 @@
+cff-version: 1.2.0
+message: Fixture only; do not cite.
+title: fixture-pkg
+version: 0.1.0
+authors:
+  - name: Caltech Library

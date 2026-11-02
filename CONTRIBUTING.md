@@ -156,6 +156,8 @@ project rather than to this repository.
 - `shellcheck --severity=style` over `bin/*.sh`
 - `actionlint` over the workflows
 - a build per generator against its fixture, plus assertions on the output
+- `build-python-dist` and `python-tests.yml` against the Python fixtures,
+  including the version mismatches the build must refuse
 - the `deploy-site` guards
 - the self-reference check
 

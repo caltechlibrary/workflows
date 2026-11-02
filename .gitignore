@@ -2,5 +2,12 @@
 _site/
 test/fixture/_site/
 
+# Python build output from the fixtures
+dist/
+build/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+
 # macOS system files
 .DS_Store

@@ -191,6 +191,87 @@ jobs:
             || { echo "::error::unhelpful error: $(cat /tmp/err)"; exit 1; }
           echo "ok"
 
+  python-dist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # A stale file from an earlier version must not ride along to PyPI.
+      - name: Leave a stale build behind
+        run: |
+          mkdir -p test/fixture-python/dist
+          echo stale > test/fixture-python/dist/fixture_pkg-0.0.9.tar.gz
+
+      - uses: ./.github/actions/build-python-dist
+        with:
+          project-dir: test/fixture-python
+          tag: v0.1.0
+
+      - uses: ./.github/actions/build-python-dist
+        with:
+          project-dir: test/fixture-python-setupcfg
+          tag: refs/tags/2.0.1
+          artifact-name: dist-setupcfg
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: /tmp/downloaded
+
+      - name: Check the output
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          ls -l /tmp/downloaded
+          [ -f /tmp/downloaded/fixture_pkg-0.1.0.tar.gz ] || fail "no sdist in the artifact"
+          [ -f /tmp/downloaded/fixture_pkg-0.1.0-py3-none-any.whl ] || fail "no wheel in the artifact"
+          [ -e /tmp/downloaded/fixture_pkg-0.0.9.tar.gz ] && fail "a stale build was uploaded"
+          [ -f test/fixture-python-setupcfg/dist/fixture_cfg-2.0.1-py3-none-any.whl ] \
+            || fail "the setup.cfg fixture did not build"
+          echo "all checks passed"
+
+      # The action has installed build and twine, so the script runs directly.
+      - name: Disagreeing versions fail before building
+        env:
+          PYTHON: python
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          fresh() { rm -rf /tmp/m; cp -R test/fixture-python /tmp/m; rm -rf /tmp/m/dist; }
+
+          fresh; sed -i 's/0.1.0/0.1.1/' /tmp/m/src/fixture_pkg/__init__.py
+          bin/build-python-dist.sh --project-dir /tmp/m 2>/tmp/err && fail "__init__.py mismatch passed"
+          grep -q '__init__.py has version 0.1.1' /tmp/err || fail "unhelpful error: $(cat /tmp/err)"
+          [ -d /tmp/m/dist ] && fail "built despite a mismatch"
+
+          fresh; sed -i 's/"version": "0.1.0"/"version": "0.2.0"/' /tmp/m/codemeta.json
+          bin/build-python-dist.sh --project-dir /tmp/m 2>/tmp/err && fail "codemeta.json mismatch passed"
+          grep -q 'codemeta.json has version 0.2.0' /tmp/err || fail "unhelpful error: $(cat /tmp/err)"
+
+          fresh; sed -i 's/^version: .*/version: "0.1.2"/' /tmp/m/CITATION.cff
+          bin/build-python-dist.sh --project-dir /tmp/m 2>/tmp/err && fail "CITATION.cff mismatch passed"
+          grep -q 'CITATION.cff has version 0.1.2' /tmp/err || fail "unhelpful error: $(cat /tmp/err)"
+
+          fresh
+          bin/build-python-dist.sh --project-dir /tmp/m --tag v0.2.0 2>/tmp/err && fail "tag mismatch passed"
+          grep -q 'release tag v0.2.0 does not match v0.1.0' /tmp/err || fail "unhelpful error: $(cat /tmp/err)"
+
+          fresh; sed -i 's/^version = .*/dynamic = ["version"]/' /tmp/m/pyproject.toml
+          bin/build-python-dist.sh --project-dir /tmp/m 2>/tmp/err && fail "a dynamic version passed"
+          grep -q 'no literal version' /tmp/err || fail "unhelpful error: $(cat /tmp/err)"
+          echo "ok"
+
+  python-tests:
+    uses: ./.github/workflows/python-tests.yml
+    with:
+      working-directory: test/fixture-python
+      python-versions: '["3.10", "3.14"]'
+      requirements: requirements-dev.txt
+      pytest-args: -v tests/
+      # The fixture's tests fail unless both of these arrive, including the
+      # "=" and space inside the second value.
+      env: |
+        TZ=America/Los_Angeles
+        FIXTURE_VALUE=a=b c
+
   publish-to-s3-guards:
     runs-on: ubuntu-latest
     steps:
