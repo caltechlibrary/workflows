@@ -1,0 +1,66 @@
+name: Build a Python distribution
+description: >-
+  Check that a package's version numbers agree, build its sdist and wheel,
+  check them with twine, and upload them as an artifact for a publish job.
+
+  Publishing is not here. pypa/gh-action-pypi-publish does not run from a
+  composite action, and Trusted Publishing does not work from a reusable
+  workflow, so the upload to PyPI stays in the calling repository's own
+  workflow.
+
+inputs:
+  project-dir:
+    description: Directory holding pyproject.toml or setup.cfg.
+    required: false
+    default: .
+  tag:
+    description: >-
+      Release tag the version must match, as v1.2.3 or 1.2.3. Leave empty to
+      skip the check, e.g. on a manual run.
+    required: false
+    default: ""
+  init-file:
+    description: >-
+      File holding __version__, relative to project-dir. Found from the package
+      name when empty.
+    required: false
+    default: ""
+  python-version:
+    description: Python used to build.
+    required: false
+    default: "3.12"
+  artifact-name:
+    description: Name of the uploaded artifact holding the sdist and wheel.
+    required: false
+    default: dist
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    # Pinned so a release of either cannot change what gets built or what
+    # passes the check without anyone choosing it.
+    - name: Install build and twine
+      shell: bash
+      run: python -m pip install build==1.6.1 twine==7.0.0
+
+    - name: Check versions and build
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        TAG: ${{ inputs.tag }}
+        INIT_FILE: ${{ inputs.init-file }}
+      run: |
+        ARGS=(--project-dir "$PROJECT_DIR")
+        [ -n "$TAG" ] && ARGS+=(--tag "$TAG")
+        [ -n "$INIT_FILE" ] && ARGS+=(--init-file "$INIT_FILE")
+        PYTHON=python "${{ github.action_path }}/../../../bin/build-python-dist.sh" "${ARGS[@]}"
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.project-dir }}/dist/
+        if-no-files-found: error

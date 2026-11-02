@@ -1,0 +1,126 @@
+name: Python tests
+
+# Reusable workflow: runs a project's pytest suite once per Python version.
+# Call it from a repository like this:
+#
+#   jobs:
+#     tests:
+#       uses: caltechlibrary/workflows/.github/workflows/python-tests.yml@v1
+#       with:
+#         python-versions: '["3.11", "3.12", "3.13"]'
+#         requirements: requirements-dev.txt
+#         env: |
+#           TZ=America/Los_Angeles
+#
+# The Python versions have no default. Which versions a project supports is
+# the project's decision, and a default here would go stale for everyone at
+# once.
+#
+# Locally the same run is `pip install -r <requirements> -e .` and `pytest`;
+# there is no script in bin/ because there is nothing to add to that.
+
+on:
+  workflow_call:
+    inputs:
+      python-versions:
+        description: >-
+          JSON list of Python versions to test on, e.g. '["3.11", "3.12"]'.
+        type: string
+        required: true
+      requirements:
+        description: >-
+          Pip requirements file holding the test dependencies, relative to
+          working-directory. Must include pytest.
+        type: string
+        required: false
+        default: ""
+      install-project:
+        description: Install the project itself with `pip install -e .`.
+        type: boolean
+        required: false
+        default: true
+      pytest-args:
+        description: Arguments passed to pytest, e.g. "-v tests/".
+        type: string
+        required: false
+        default: ""
+      env:
+        description: >-
+          Extra environment variables for the test run, one NAME=value per
+          line. Use it for what a suite assumes about its surroundings, such
+          as TZ=America/Los_Angeles.
+        type: string
+        required: false
+        default: ""
+      working-directory:
+        description: Directory holding the project.
+        type: string
+        required: false
+        default: .
+      runs-on:
+        description: Runner label.
+        type: string
+        required: false
+        default: ubuntu-latest
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ${{ inputs.runs-on }}
+    strategy:
+      # One version failing says nothing about the others; see them all.
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(inputs.python-versions) }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set the test environment
+        env:
+          EXTRA_ENV: ${{ inputs.env }}
+        run: |
+          while IFS= read -r line; do
+            [ -n "${line// /}" ] || continue
+            name="${line%%=*}"
+            if [ "$name" = "$line" ] || ! [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+              echo "::error::env lines must be NAME=value, got: $line"
+              exit 1
+            fi
+            echo "$line" >> "$GITHUB_ENV"
+            echo "$name=${line#*=}"
+          done <<< "$EXTRA_ENV"
+
+      - name: Install dependencies
+        env:
+          REQUIREMENTS: ${{ inputs.requirements }}
+          INSTALL_PROJECT: ${{ inputs.install-project }}
+        run: |
+          python -m pip install --upgrade pip
+          if [ -n "$REQUIREMENTS" ]; then
+            [ -f "$REQUIREMENTS" ] || {
+              echo "::error::no such requirements file: $REQUIREMENTS"; exit 1; }
+            python -m pip install -r "$REQUIREMENTS"
+          fi
+          [ "$INSTALL_PROJECT" = "true" ] && python -m pip install -e .
+          python -m pytest --version >/dev/null 2>&1 || {
+            echo "::error::pytest is not installed; add it to your requirements"
+            exit 1; }
+
+      - name: Run pytest
+        env:
+          PYTEST_ARGS: ${{ inputs.pytest-args }}
+        run: |
+          read -ra ARGS <<< "$PYTEST_ARGS"
+          python -m pytest ${ARGS[@]+"${ARGS[@]}"}

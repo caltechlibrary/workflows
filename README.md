@@ -28,6 +28,10 @@ decision instead of a rewrite.
 | `deploy-site` | Checks the build produced a real site, uploads it for Pages |
 | `publish-to-s3` | Uploads built assets to S3 over OIDC and invalidates CloudFront |
 | `create-release` | Tags a commit and opens a draft GitHub release with artifacts |
+| `build-python-dist` | Checks a Python package’s versions agree, builds and checks its sdist and wheel |
+
+For Python packages there is also `python-tests.yml`, a reusable workflow that
+runs pytest across Python versions. See [Python packages](#python-packages).
 
 Adding a generator means one new `build-*` action; nothing downstream changes.
 
@@ -135,6 +139,138 @@ absorbing a release nobody chose.
 Note that Zensical writes directory-style URLs — `second/index.html`, not
 `second.html`. Links between pages differ from the Pandoc output, which matters
 if you are migrating an existing site.
+
+## Python packages
+
+Two pieces: `python-tests.yml` runs a package’s tests, and `build-python-dist`
+builds what gets uploaded to PyPI. The upload itself stays in your own
+workflow, for reasons explained below.
+
+### Tests
+
+Add `.github/workflows/tests.yml`:
+
+```yaml
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    uses: caltechlibrary/workflows/.github/workflows/python-tests.yml@v1
+    with:
+      python-versions: '["3.11", "3.12", "3.13"]'
+      requirements: requirements-dev.txt
+      pytest-args: -v tests/
+      env: |
+        TZ=America/Los_Angeles
+```
+
+`python-versions` has no default. Which versions a package supports is the
+package’s decision, and a shared default would go stale for every repository
+at once.
+
+`env` is for what a test suite assumes about its surroundings. Some suites in
+the org assume US Pacific time, and pass on a laptop in California and fail on
+a runner in UTC until `TZ` is set.
+
+#### Inputs for `python-tests.yml`
+
+| Name | Default | What it does |
+| --- | --- | --- |
+| `python-versions` | — | JSON list of versions, one job each (required) |
+| `requirements` | — | Pip requirements file with the test dependencies. Must include pytest |
+| `install-project` | `true` | Run `pip install -e .` after the requirements |
+| `pytest-args` | — | Arguments for pytest, e.g. `-v --cov=mypkg tests/` |
+| `env` | — | Extra environment variables, one `NAME=value` per line |
+| `working-directory` | `.` | Directory holding the project |
+| `runs-on` | `ubuntu-latest` | Runner label |
+
+### Publishing to PyPI
+
+Add `.github/workflows/publish.yml`:
+
+```yaml
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: caltechlibrary/workflows/.github/actions/build-python-dist@v1
+        with:
+          tag: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+
+  publish:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/mypkg/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+```
+
+Publishing a GitHub release builds the package and uploads it to PyPI. Running
+the workflow by hand (**Run workflow** on the Actions page) builds and checks it
+without uploading anything, which is a way to find a problem before you tag.
+
+The build fails before anything is uploaded if the version in `pyproject.toml`
+(or `setup.cfg`) disagrees with `__version__`, `codemeta.json`,
+`CITATION.cff`, or the release tag, or if `twine check --strict` rejects the
+result.
+
+Before the first release, register the repository as a
+[trusted publisher](https://docs.pypi.org/trusted-publishers/) on the PyPI
+project. **Three values there must match this file**: the repository, the
+workflow filename (`publish.yml`), and the environment name (`pypi`). Rename
+either here and the upload is refused. By contrast, the job names `build` and
+`publish` are yours to choose; only `needs:` has to agree with them.
+
+**The artifact name must match too.** `build-python-dist` uploads to an
+artifact called `dist` by default and the publish job downloads `dist`. Change
+`artifact-name` on one and change the download on the other.
+
+#### Why the publish job is not shared
+
+Everything else in this repository is shared, so the publish job looks like
+something that should be. It cannot be:
+
+- **Trusted Publishing does not work from a reusable workflow.** PyPI does not
+  support it, and `pypa/gh-action-pypi-publish` says so in its README.
+- **`pypa/gh-action-pypi-publish` is unsupported inside a composite action.**
+  Its README asks for the upload to run in a job of its own, so that the one
+  job able to mint an OIDC token runs nothing but the upload.
+- **The alternative is an API token** stored in every repository, which is
+  what Trusted Publishing exists to remove.
+
+So the checks and the build — the part worth sharing, and the part that fails
+quietly when copied — are shared, and the fifteen lines that hold the
+credential stay with the repository that owns the PyPI project. See
+[ADR-0009](docs/decisions/0009-keep-pypi-publishing-in-the-calling-repository.md).
 
 ## Action reference
 
@@ -306,6 +442,36 @@ The deploy itself is not in this action: `actions/deploy-pages` needs a
 job-level `environment:`, which a composite action cannot declare. Put it in
 your own deploy job, or use a `docs-*.yml` reusable workflow.
 
+### `build-python-dist`
+
+| Input | Default | |
+| --- | --- | --- |
+| `project-dir` | `.` | Directory holding `pyproject.toml` or `setup.cfg`. `dist/` is written inside it |
+| `tag` | — | Release tag the version must match, `v1.2.3` or `1.2.3`. Empty skips the check |
+| `init-file` | found from the package name | File holding `__version__`, relative to `project-dir` |
+| `python-version` | `3.12` | Python used to build |
+| `artifact-name` | `dist` | Artifact holding the sdist and wheel. Your publish job must download the same name |
+
+The version is read from `pyproject.toml`’s `[project]` table, or from
+`setup.cfg`’s `[metadata]` section when `pyproject.toml` has none. Each of
+these that exists must agree with it:
+
+- `__version__` in `<package>/__init__.py` or `src/<package>/__init__.py`
+- `"version"` in `codemeta.json` (trailing commas are tolerated)
+- `version:` in `CITATION.cff`
+- `setup.cfg`, when the version came from `pyproject.toml`
+- the release tag, when `tag` is set
+
+A file that is absent, or holds no literal version, is listed in the log as not
+checked rather than failing the build. A version that is entirely dynamic —
+computed by the build backend — fails, because there is nothing to compare
+before building.
+
+After building, the version in the built filenames is compared too, which
+catches a build backend that took its version from somewhere else. `build` and
+`twine` are pinned in the action. Stale sdists and wheels in `dist/` are
+removed first, so an earlier version cannot ride along to PyPI.
+
 ### `create-release`
 
 | Input | Default | |
@@ -373,7 +539,13 @@ documentation requirements for `build-sphinx.sh`, and
 [Pagefind](https://pagefind.app/) for `index-site.sh`. `create-release.sh`
 needs the [`gh` CLI](https://cli.github.com/), already authenticated as
 yourself; `publish-to-s3.sh` needs the AWS CLI and whatever profile you
-normally use.
+normally use. `build-python-dist.sh` needs `build` and `twine` installed for
+the Python it runs (`python3`, or set `PYTHON`):
+
+```sh
+python3 -m pip install build twine
+build-python-dist.sh --tag v1.2.3    # checks versions, builds into dist/
+```
 
 ## Versioning
 
@@ -402,8 +574,8 @@ repository keeps. The reasoning behind those conventions is recorded as
 architecture decision records in [`docs/decisions/`](docs/decisions/).
 
 `.github/workflows/ci.yml` runs on every change: `shellcheck` over the scripts,
-`actionlint` over the workflows, a build per generator against its fixture, the
-`deploy-site` guards, and a check that the reusable workflows have not drifted
+`actionlint` over the workflows, a build per generator against its fixture, a
+Python package build and test run against theirs, the `deploy-site` guards, and a check that the reusable workflows have not drifted
 from the current major tag.
 
 ## Known limitations

@@ -12,6 +12,24 @@ what moved. See
 
 ## [Unreleased]
 
+### Added
+
+- `build-python-dist` action and `bin/build-python-dist.sh`: check that a
+  Python package’s version in `pyproject.toml` or `setup.cfg` agrees with
+  `__version__`, `codemeta.json`, `CITATION.cff`, and optionally the release
+  tag; build the sdist and wheel with pinned `build`; run
+  `twine check --strict`; and upload `dist/` as an artifact. It fails on an
+  empty `dist/` and on built files whose version differs from the source’s.
+- `python-tests.yml` reusable workflow: pytest across a list of Python
+  versions, with inputs for the requirements file, pytest arguments, and extra
+  environment variables such as `TZ`.
+- A README section with a consumer’s `publish.yml`: the shared build job plus
+  the repository’s own PyPI publish job.
+- [ADR-0009](docs/decisions/0009-keep-pypi-publishing-in-the-calling-repository.md),
+  recording why the PyPI upload stays in each repository: Trusted Publishing
+  does not work from a reusable workflow, and `pypa/gh-action-pypi-publish` is
+  unsupported in a composite action.
+
 ## [1.4.0] - 2026-09-10
 
 ### Removed
