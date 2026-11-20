@@ -4,15 +4,17 @@ name: Release
 # workflow you run by hand, like this:
 #
 #   name: Release
-#   run-name: Release ${{ inputs.version }}${{ inputs.dry-run && ' (dry run)' || '' }}
+#   run-name: Release ${{ inputs.bump }}${{ inputs.dry-run && ' (dry run)' || '' }}
 #
 #   on:
 #     workflow_dispatch:
 #       inputs:
-#         version:
-#           description: major, minor, patch, or a version such as 1.4.0
+#         bump:
+#           description: "patch: fixes / minor: new features / major: breaking changes"
+#           type: choice
+#           options: [patch, minor, major]
+#           default: patch
 #           required: true
-#           type: string
 #         dry-run:
 #           description: Dry run. Show the changes, and push nothing.
 #           type: boolean
@@ -27,7 +29,7 @@ name: Release
 #       permissions:
 #         contents: write
 #       with:
-#         version: ${{ inputs.version }}
+#         version: ${{ inputs.bump }}
 #         dry-run: ${{ inputs.dry-run }}
 #
 # It sets the version in every file that records one and dates the

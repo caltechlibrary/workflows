@@ -191,8 +191,8 @@ Entries accumulate under `## [Unreleased]` as pull requests merge. Releasing is
 a separate, deliberate step — one commit and one tag per release, not per
 change.
 
-Release from **Actions → Release → Run workflow** on `main`, with `major`,
-`minor`, `patch`, or a version. That runs `self-release.yml`, which calls
+Release from **Actions → Release → Run workflow** on `main`, picking `patch`,
+`minor`, or `major` from the menu. That runs `self-release.yml`, which calls
 `release.yml` with `major-tag` on. Leave **Dry run** on first and read the
 diff in the job summary; then run it again with **Dry run** off. It:
 

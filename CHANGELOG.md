@@ -12,6 +12,11 @@ what moved. See
 
 ## [Unreleased]
 
+### Changed
+
+- `self-release.yml` and the example caller of `release.yml` offer `patch`,
+  `minor`, and `major` as a menu instead of a text field.
+
 ## [1.6.0] - 2026-11-20
 
 ### Added

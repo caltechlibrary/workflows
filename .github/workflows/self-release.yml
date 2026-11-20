@@ -8,15 +8,17 @@ name: Release
 # the release workflow applies to the next release. The prepare-release action
 # release.yml calls is still the one at @v1.
 
-run-name: Release ${{ inputs.version }}${{ inputs.dry-run && ' (dry run)' || '' }}
+run-name: Release ${{ inputs.bump }}${{ inputs.dry-run && ' (dry run)' || '' }}
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: major, minor, patch, or a version such as 1.4.0
+      bump:
+        description: "patch: fixes / minor: new features / major: breaking changes"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
         required: true
-        type: string
       dry-run:
         description: Dry run. Show the changes, and push nothing.
         type: boolean
@@ -31,6 +33,6 @@ jobs:
     permissions:
       contents: write
     with:
-      version: ${{ inputs.version }}
+      version: ${{ inputs.bump }}
       dry-run: ${{ inputs.dry-run }}
       major-tag: true

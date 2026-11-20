@@ -287,15 +287,17 @@ Add `.github/workflows/release.yml`:
 
 ```yaml
 name: Release
-run-name: Release ${{ inputs.version }}${{ inputs.dry-run && ' (dry run)' || '' }}
+run-name: Release ${{ inputs.bump }}${{ inputs.dry-run && ' (dry run)' || '' }}
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: major, minor, patch, or a version such as 1.4.0
+      bump:
+        description: "patch: fixes / minor: new features / major: breaking changes"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
         required: true
-        type: string
       dry-run:
         description: Dry run. Show the changes, and push nothing.
         type: boolean
@@ -310,11 +312,15 @@ jobs:
     permissions:
       contents: write
     with:
-      version: ${{ inputs.version }}
+      version: ${{ inputs.bump }}
       dry-run: ${{ inputs.dry-run }}
 ```
 
-Then release from **Actions → Release → Run workflow** on the default branch.
+Then release from **Actions → Release → Run workflow** on the default branch,
+picking `patch`, `minor`, or `major` from the menu. The `version` input of
+`release.yml` also takes a version such as `1.4.0`; to release one, make the
+caller’s input `type: string` instead of `type: choice`. (A reusable
+workflow’s own inputs can’t be choices, so the menu belongs in the caller.)
 A dry run, the default, shows the diff and the release notes in the job
 summary and pushes nothing.
 
