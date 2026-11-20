@@ -1,4 +1,4 @@
-name: Release
+name: Self-Release
 
 # Release this repository: release.yml, with the major tag moved as well, since
 # consumers reference this repository at @v1. See "Releasing" in
