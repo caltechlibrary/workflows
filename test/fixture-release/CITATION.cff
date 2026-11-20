@@ -1,0 +1,7 @@
+cff-version: 1.2.0
+message: Fixture only; do not cite.
+title: fixture-release
+version: 1.4.2
+date-released: "2026-01-15"
+authors:
+  - name: Caltech Library

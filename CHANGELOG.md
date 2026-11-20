@@ -12,6 +12,27 @@ what moved. See
 
 ## [Unreleased]
 
+### Added
+
+- `release.yml` reusable workflow: release a new version from one input,
+  `major`, `minor`, `patch`, or a version such as `1.4.0`. It commits
+  “Release X.Y.Z”, tags `vX.Y.Z`, and pushes both together, or opens a draft
+  GitHub release with `draft-release`. With `major-tag`, it also moves the
+  major tag, such as `v1`, to the release. Dry run by default.
+- `self-release.yml`: this repository releases itself from
+  **Actions → Release**, through `release.yml` with `major-tag` on.
+- `prepare-release` action and `bin/prepare-release.sh`: set the new version
+  in `pyproject.toml`, `setup.cfg`, `__version__`, `uv.lock`,
+  `codemeta.json` (with `datePublished`), and `CITATION.cff` (with
+  `date-released`), wherever they carry one, and turn the `[Unreleased]`
+  section of `CHANGELOG.md` into the version’s section. Refuses files that
+  disagree, a version not greater than the current one or the latest tag,
+  and an empty `[Unreleased]`, and writes nothing unless every check passes.
+- `test/test-prepare-release.sh` and `test/fixture-release`, run in CI and
+  runnable locally, including under macOS’s bash 3.2.
+- [ADR-0010](docs/decisions/0010-release-from-one-input.md), recording why a
+  release is its own commit, made from one input.
+
 ## [1.5.0] - 2026-11-02
 
 ### Added

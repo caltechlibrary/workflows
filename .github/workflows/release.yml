@@ -1,0 +1,252 @@
+name: Release
+
+# Reusable workflow: release a new version from one input. Call it from a
+# workflow you run by hand, like this:
+#
+#   name: Release
+#   run-name: Release ${{ inputs.version }}${{ inputs.dry-run && ' (dry run)' || '' }}
+#
+#   on:
+#     workflow_dispatch:
+#       inputs:
+#         version:
+#           description: major, minor, patch, or a version such as 1.4.0
+#           required: true
+#           type: string
+#         dry-run:
+#           description: Dry run. Show the changes, and push nothing.
+#           type: boolean
+#           default: true
+#
+#   permissions:
+#     contents: read
+#
+#   jobs:
+#     release:
+#       uses: caltechlibrary/workflows/.github/workflows/release.yml@v1
+#       permissions:
+#         contents: write
+#       with:
+#         version: ${{ inputs.version }}
+#         dry-run: ${{ inputs.dry-run }}
+#
+# It sets the version in every file that records one and dates the
+# changelog’s [Unreleased] section (bin/prepare-release.sh), commits that as
+# “Release X.Y.Z”, tags it vX.Y.Z, and pushes both together. With
+# draft-release, it opens a draft GitHub release instead of pushing the tag,
+# and publishing the draft creates the tag. With major-tag, it also moves the
+# major tag, such as v1, to the release, for repositories that consumers
+# reference by major tag.
+#
+# NOTE: the `uses:` lines below are pinned to a literal ref because GitHub
+# does not allow expressions there. They must match the tag this workflow is
+# released under; .github/workflows/ci.yml checks that they do.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: major, minor, or patch to bump the current version, or a version such as 1.4.0.
+        type: string
+        required: true
+      dry-run:
+        description: Dry run. Show the changes and the release notes, and push nothing.
+        type: boolean
+        required: false
+        default: true
+      draft-release:
+        description: >-
+          Open a draft GitHub release, with the changelog section as its
+          notes, instead of pushing the tag. Publishing the draft creates the
+          tag.
+        type: boolean
+        required: false
+        default: false
+      major-tag:
+        description: >-
+          Also move the major tag, such as v1, to the release, creating it for
+          a new major version. For repositories of actions and reusable
+          workflows that consumers reference by major tag. Not with
+          draft-release.
+        type: boolean
+        required: false
+        default: false
+      timezone:
+        description: Time zone that decides the release date.
+        type: string
+        required: false
+        default: America/Los_Angeles
+      runs-on:
+        description: Runner label.
+        type: string
+        required: false
+        default: ubuntu-latest
+    secrets:
+      token:
+        description: >-
+          Token to push with, in place of the workflow’s own. Needed when
+          main is protected against the workflow’s pushes, or when the tag
+          should start other workflows, which a push by the workflow’s own
+          token never does.
+        required: false
+    outputs:
+      version:
+        description: The new version, such as 1.5.0.
+        value: ${{ jobs.release.outputs.version }}
+      tag:
+        description: The new version’s tag, such as v1.5.0.
+        value: ${{ jobs.release.outputs.tag }}
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release ${{ inputs.version }}${{ inputs.dry-run && ' (dry run)' || '' }}
+    runs-on: ${{ inputs.runs-on }}
+    permissions:
+      contents: write
+    # One release at a time per repository: two at once would both read the
+    # same current version.
+    concurrency:
+      group: release-${{ github.repository }}
+      cancel-in-progress: false
+    outputs:
+      version: ${{ steps.prepare.outputs.version }}
+      tag: ${{ steps.prepare.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ secrets.token || github.token }}
+    steps:
+      - name: Check that this is running on the default branch
+        if: github.ref_name != github.event.repository.default_branch
+        env:
+          BRANCH: ${{ github.ref_name }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+        run: |
+          echo "::error::Run this on $DEFAULT, not on $BRANCH."
+          exit 1
+
+      - name: Check that major-tag and draft-release aren’t both set
+        if: inputs.major-tag && inputs.draft-release
+        run: |
+          # The draft’s tag doesn’t exist until someone publishes it, so the
+          # major tag would point at a release that might never be made.
+          echo "::error::major-tag can't be used with draft-release."
+          exit 1
+
+      - uses: actions/checkout@v7
+        with:
+          # The tags, so the checks for an existing or later tag see them.
+          fetch-depth: 0
+          token: ${{ secrets.token || github.token }}
+
+      - uses: caltechlibrary/workflows/.github/actions/prepare-release@v1
+        id: prepare
+        with:
+          version: ${{ inputs.version }}
+          timezone: ${{ inputs.timezone }}
+          notes-file: ${{ runner.temp }}/release-notes.md
+
+      - name: Show the changes
+        id: show
+        env:
+          VERSION: ${{ steps.prepare.outputs.version }}
+          PREVIOUS: ${{ steps.prepare.outputs.previous }}
+          TAG: ${{ steps.prepare.outputs.tag }}
+          MAJOR_TAG: ${{ inputs.major-tag }}
+        run: |
+          if [ "$MAJOR_TAG" = "true" ]; then
+            major="${TAG%%.*}"
+            echo "major=$major" >> "$GITHUB_OUTPUT"
+            if from="$(git rev-parse -q --verify "refs/tags/$major^{commit}")"; then
+              moves="$major moves from $(git log -1 --format='%h “%s”' "$from") to the release commit."
+            else
+              moves="$major is created at the release commit."
+            fi
+          fi
+          {
+            echo "## $PREVIOUS → $VERSION"
+            echo
+            [ -n "${moves:-}" ] && { echo "$moves"; echo; }
+            echo '```diff'
+            git diff
+            echo '```'
+            echo
+            echo "## Release notes"
+            echo
+            cat "$RUNNER_TEMP/release-notes.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat
+
+      - name: Commit, tag, and push
+        id: commit
+        if: ${{ !inputs.dry-run }}
+        env:
+          VERSION: ${{ steps.prepare.outputs.version }}
+          TAG: ${{ steps.prepare.outputs.tag }}
+          MAJOR: ${{ steps.show.outputs.major }}
+          BRANCH: ${{ github.ref_name }}
+          DRAFT: ${{ inputs.draft-release }}
+          GIT_AUTHOR_NAME: ${{ github.actor }}
+          GIT_AUTHOR_EMAIL: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          git commit -q -a -m "Release $VERSION"
+          if [ "$DRAFT" = "true" ]; then
+            # The draft release creates the tag when it is published.
+            git push origin "HEAD:refs/heads/$BRANCH"
+          else
+            # Annotated, so `git describe` finds it and it records who tagged
+            # it and when.
+            git tag -a "$TAG" -m "Release $VERSION"
+            refs=("HEAD:refs/heads/$BRANCH" "refs/tags/$TAG")
+            if [ -n "$MAJOR" ]; then
+              # Lightweight, like the major tags of actions/checkout and the
+              # rest. The + forces this one ref, since it moves.
+              git tag -f "$MAJOR" HEAD
+              refs+=("+refs/tags/$MAJOR")
+            fi
+            # All or nothing: a tag without its commit on the branch, or the
+            # reverse, is a release half made.
+            git push --atomic origin "${refs[@]}"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: caltechlibrary/workflows/.github/actions/create-release@v1
+        name: Open a draft release
+        if: ${{ inputs.draft-release }}
+        with:
+          tag: ${{ steps.prepare.outputs.tag }}
+          title: Release ${{ steps.prepare.outputs.version }}
+          target: ${{ steps.commit.outputs.sha || github.sha }}
+          generate-notes: "false"
+          dry-run: ${{ inputs.dry-run }}
+          token: ${{ secrets.token || github.token }}
+
+      - name: Use the changelog section as the release notes
+        if: ${{ inputs.draft-release && !inputs.dry-run }}
+        env:
+          TAG: ${{ steps.prepare.outputs.tag }}
+        run: gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      - name: Say what happened
+        env:
+          VERSION: ${{ steps.prepare.outputs.version }}
+          TAG: ${{ steps.prepare.outputs.tag }}
+          MAJOR: ${{ steps.show.outputs.major }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          DRAFT: ${{ inputs.draft-release }}
+        run: |
+          {
+            echo "## Result"
+            echo
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "Dry run: nothing was committed or pushed. Run it again with **Dry run** off to release $VERSION."
+            elif [ "$DRAFT" = "true" ]; then
+              url="$(gh release view "$TAG" --json url --jq .url)"
+              echo "Committed and pushed \"Release $VERSION\". Read the [draft release]($url) and publish it; publishing creates $TAG."
+            else
+              echo "Committed \"Release $VERSION\" and pushed it with tag $TAG${MAJOR:+, and moved $MAJOR to it}."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

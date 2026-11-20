@@ -1,0 +1,19 @@
+version = 1
+revision = 3
+requires-python = ">=3.11"
+
+[[package]]
+name = "fixture-release"
+version = "1.4.2"
+source = { editable = "." }
+dependencies = [
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "requests" }]
+
+[[package]]
+name = "requests"
+version = "1.4.2"
+source = { registry = "https://pypi.org/simple" }

@@ -1,0 +1,12 @@
+[project]
+name = "Fixture.Release"
+version = "1.4.2"
+description = "Fixture for prepare-release.sh"
+requires-python = ">=3.11"
+dependencies = ["requests"]
+
+[project.scripts]
+fixture-release = "fixture_release:main"
+
+[tool.example]
+version = "9.9.9"

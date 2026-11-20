@@ -28,7 +28,7 @@ jobs:
       - name: Shellcheck
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          shellcheck --severity=style bin/*.sh
+          shellcheck --severity=style bin/*.sh test/*.sh
 
       - name: Actionlint
         run: |
@@ -271,6 +271,51 @@ jobs:
       env: |
         TZ=America/Los_Angeles
         FIXTURE_VALUE=a=b c
+
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Every case the script handles
+        run: test/test-prepare-release.sh
+
+      # Exercised the way a consumer does -- through the action -- against a
+      # copy of the fixture with a history of its own, since the fixture’s
+      # 1.4.2 is older than this repository’s tags.
+      - name: Make a project to release
+        run: |
+          cp -R test/fixture-release /tmp/release
+          cd /tmp/release
+          git init -q
+          git add -A
+          git -c user.name=ci -c user.email=ci@example.com commit -qm fixture
+          git tag v1.4.2
+
+      - uses: ./.github/actions/prepare-release
+        id: prepare
+        with:
+          version: minor
+          project-dir: /tmp/release
+          notes-file: /tmp/release-notes.md
+
+      - name: Check the outputs
+        env:
+          PREVIOUS: ${{ steps.prepare.outputs.previous }}
+          VERSION: ${{ steps.prepare.outputs.version }}
+          TAG: ${{ steps.prepare.outputs.tag }}
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [ "$PREVIOUS" = 1.4.2 ] || fail "previous is \"$PREVIOUS\""
+          [ "$VERSION" = 1.5.0 ]  || fail "version is \"$VERSION\""
+          [ "$TAG" = v1.5.0 ]     || fail "tag is \"$TAG\""
+          # The date is today in Pasadena, not in UTC.
+          today="$(TZ=America/Los_Angeles date +%F)"
+          grep -qx "## \[1.5.0\] - $today" /tmp/release/CHANGELOG.md \
+            || fail "the changelog section is not dated $today"
+          grep -q 'a thing worth releasing' /tmp/release-notes.md || fail "no release notes"
+          git -C /tmp/release diff --stat
+          echo "all checks passed"
 
   publish-to-s3-guards:
     runs-on: ubuntu-latest

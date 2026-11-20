@@ -191,16 +191,30 @@ Entries accumulate under `## [Unreleased]` as pull requests merge. Releasing is
 a separate, deliberate step — one commit and one tag per release, not per
 change.
 
-1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, and add a fresh empty
-   `## [Unreleased]` above it.
-2. Update the link references at the bottom of `CHANGELOG.md`.
-3. Commit that on its own: `Release X.Y.Z`.
-4. Tag that commit: `git tag -a vX.Y.Z -m "vX.Y.Z — <summary>"`.
-5. Move the major tag: `git tag -f vX` and force-push it.
-6. Push the commit and both tags.
+Release from **Actions → Release → Run workflow** on `main`, with `major`,
+`minor`, `patch`, or a version. That runs `self-release.yml`, which calls
+`release.yml` with `major-tag` on. Leave **Dry run** on first and read the
+diff in the job summary; then run it again with **Dry run** off. It:
+
+1. turns `## [Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD` under a fresh, empty
+   `## [Unreleased]`, updates the compare links, and sets `version` and
+   `datePublished` in `codemeta.json`;
+2. commits that on its own as “Release X.Y.Z”;
+3. tags that commit `vX.Y.Z`, and moves the major tag, such as `v1`, to it;
+4. pushes the commit and both tags together, or nothing at all.
 
 Tagging the release commit means the tag points at a changelog that describes
-itself, rather than one still saying "Unreleased".
+itself, rather than one still saying “Unreleased”.
+
+By hand, when the workflow can’t run, from an up-to-date `main`:
+
+```sh
+bin/prepare-release.sh minor          # or major, patch, or X.Y.Z
+git commit -am "Release X.Y.Z"
+git tag -a vX.Y.Z -m "Release X.Y.Z"
+git tag -f vX
+git push --atomic origin main vX.Y.Z +vX
+```
 
 Choosing the number, per
 [ADR-0006](docs/decisions/0006-version-with-moving-major-tags.md):

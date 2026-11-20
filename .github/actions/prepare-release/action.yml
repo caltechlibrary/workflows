@@ -1,0 +1,58 @@
+name: Prepare a release
+description: >-
+  Set a new version, given as major, minor, patch, or X.Y.Z, in every file
+  that records one, and date the changelog’s [Unreleased] section. Edits the
+  working tree only: it does not commit, tag, or push.
+
+inputs:
+  version:
+    description: major, minor, or patch to bump the current version, or a version such as 1.4.0.
+    required: true
+  project-dir:
+    description: Directory holding the project.
+    required: false
+    default: .
+  date:
+    description: Release date, YYYY-MM-DD. Defaults to today in `timezone`.
+    required: false
+    default: ""
+  timezone:
+    description: >-
+      Time zone that decides today’s date. Runners use UTC, which is
+      tomorrow already on a Pasadena afternoon.
+    required: false
+    default: America/Los_Angeles
+  notes-file:
+    description: Also write the new changelog section’s body to this file, for release notes.
+    required: false
+    default: ""
+
+outputs:
+  previous:
+    description: The version before this release.
+    value: ${{ steps.prepare.outputs.previous }}
+  version:
+    description: The new version, such as 1.5.0.
+    value: ${{ steps.prepare.outputs.version }}
+  tag:
+    description: The new version’s tag, such as v1.5.0.
+    value: ${{ steps.prepare.outputs.tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set the version
+      id: prepare
+      shell: bash
+      env:
+        REQUEST: ${{ inputs.version }}
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        DATE: ${{ inputs.date }}
+        TZ: ${{ inputs.timezone }}
+        NOTES_FILE: ${{ inputs.notes-file }}
+      run: |
+        ARGS=(--project-dir "$PROJECT_DIR")
+        [ -n "$DATE" ] && ARGS+=(--date "$DATE")
+        [ -n "$NOTES_FILE" ] && ARGS+=(--notes "$NOTES_FILE")
+        "${{ github.action_path }}/../../../bin/prepare-release.sh" "${ARGS[@]}" "$REQUEST" \
+          >> "$GITHUB_OUTPUT"

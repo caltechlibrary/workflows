@@ -1,0 +1,36 @@
+name: Release
+
+# Release this repository: release.yml, with the major tag moved as well, since
+# consumers reference this repository at @v1. See "Releasing" in
+# CONTRIBUTING.md.
+#
+# It calls release.yml from the branch it runs on, not at @v1, so a change to
+# the release workflow applies to the next release. The prepare-release action
+# release.yml calls is still the one at @v1.
+
+run-name: Release ${{ inputs.version }}${{ inputs.dry-run && ' (dry run)' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: major, minor, patch, or a version such as 1.4.0
+        required: true
+        type: string
+      dry-run:
+        description: Dry run. Show the changes, and push nothing.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+    with:
+      version: ${{ inputs.version }}
+      dry-run: ${{ inputs.dry-run }}
+      major-tag: true

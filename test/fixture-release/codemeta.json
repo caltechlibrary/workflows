@@ -1,0 +1,10 @@
+{
+  "@context": "https://w3id.org/codemeta/3.0",
+  "type": "SoftwareSourceCode",
+  "name": "fixture-release",
+  "version": "1.4.2",
+  "programmingLanguage": {
+    "name": "Python",
+    "version": "3.13"
+  }
+}

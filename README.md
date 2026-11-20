@@ -29,9 +29,12 @@ decision instead of a rewrite.
 | `publish-to-s3` | Uploads built assets to S3 over OIDC and invalidates CloudFront |
 | `create-release` | Tags a commit and opens a draft GitHub release with artifacts |
 | `build-python-dist` | Checks a Python package’s versions agree, builds and checks its sdist and wheel |
+| `prepare-release` | Sets a new version, or a major, minor, or patch bump, in every file that records one, and dates the changelog |
 
 For Python packages there is also `python-tests.yml`, a reusable workflow that
 runs pytest across Python versions. See [Python packages](#python-packages).
+And `release.yml` releases a new version from one input; see
+[Releasing](#releasing).
 
 Adding a generator means one new `build-*` action; nothing downstream changes.
 
@@ -272,6 +275,100 @@ quietly when copied — are shared, and the fifteen lines that hold the
 credential stay with the repository that owns the PyPI project. See
 [ADR-0009](docs/decisions/0009-keep-pypi-publishing-in-the-calling-repository.md).
 
+## Releasing
+
+`release.yml` releases a new version from one input: `major`, `minor`,
+`patch`, or a version such as `1.4.0`. It sets that version in every file
+that records one, turns the changelog’s `[Unreleased]` section into the
+version’s section, commits that as “Release X.Y.Z”, tags it `vX.Y.Z`, and
+pushes the commit and the tag together.
+
+Add `.github/workflows/release.yml`:
+
+```yaml
+name: Release
+run-name: Release ${{ inputs.version }}${{ inputs.dry-run && ' (dry run)' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: major, minor, patch, or a version such as 1.4.0
+        required: true
+        type: string
+      dry-run:
+        description: Dry run. Show the changes, and push nothing.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    uses: caltechlibrary/workflows/.github/workflows/release.yml@v1
+    permissions:
+      contents: write
+    with:
+      version: ${{ inputs.version }}
+      dry-run: ${{ inputs.dry-run }}
+```
+
+Then release from **Actions → Release → Run workflow** on the default branch.
+A dry run, the default, shows the diff and the release notes in the job
+summary and pushes nothing.
+
+Between releases, add entries under `## [Unreleased]` in `CHANGELOG.md` as
+you go ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)). A release
+with nothing there is refused, so the changelog can’t fall behind the tags.
+
+These files are updated wherever they carry a version, and skipped where
+they don’t:
+
+| File | What changes |
+| --- | --- |
+| `CHANGELOG.md` | `[Unreleased]` becomes `## [X.Y.Z] - DATE` under a new, empty `[Unreleased]`; the compare links at the bottom are updated if present. Required |
+| `pyproject.toml` | `[project]` `version`, when it is a literal |
+| `setup.cfg` | `[metadata]` `version`, when it is a literal |
+| `__init__.py` | `__version__` in `<package>/` or `src/<package>/` |
+| `uv.lock` | the project’s own `[[package]]` `version` |
+| `codemeta.json` | `version`, and `datePublished`, added if absent |
+| `CITATION.cff` | `version` and `date-released` |
+
+The current version is read from those files, which must agree, and the new
+one must be greater than it and than every existing `vX.Y.Z` tag. The date is
+today in Pasadena; set `timezone` to change that.
+
+#### Inputs for `release.yml`
+
+| Name | Default | What it does |
+| --- | --- | --- |
+| `version` | — | `major`, `minor`, `patch`, or a version such as `1.4.0` (required) |
+| `dry-run` | `true` | Show the changes and the release notes, and push nothing |
+| `draft-release` | `false` | Open a draft GitHub release, with the changelog section as its notes, instead of pushing the tag. Publishing the draft creates the tag |
+| `major-tag` | `false` | Also move the major tag, such as `v1`, to the release, creating it for a new major version. Not with `draft-release` |
+| `timezone` | `America/Los_Angeles` | Time zone that decides the release date |
+| `runs-on` | `ubuntu-latest` | Runner label |
+
+And one optional secret, `token`, to push with in place of the workflow’s own.
+
+**A repository that consumers reference by major tag**, as they reference
+this one at `@v1`, sets `major-tag: true`, and each release moves that tag to
+itself. This repository releases itself that way, with `self-release.yml`.
+
+**A protected default branch** has to let the workflow push to it, or be given
+a `token` that can.
+
+**A tag pushed with the workflow’s own token starts no other workflows.**
+GitHub doesn’t run workflows for events caused by `GITHUB_TOKEN`. A
+repository that builds or publishes on a new tag needs `draft-release` (a
+person publishing the draft is an ordinary event) or a `token` from a
+GitHub App. PyPI publishing on `release: published`, as in
+[Publishing to PyPI](#publishing-to-pypi), works with `draft-release`.
+
+Releasing is a separate commit from the changes it releases; see
+[ADR-0010](docs/decisions/0010-release-from-one-input.md).
+
 ## Action reference
 
 Every build action writes a directory of static HTML to `output` with an
@@ -501,6 +598,21 @@ It refuses to run if the tag or the release already exists, and it fails on an
 artifact that is missing or zero bytes — a release whose files are empty looks
 fine until someone downloads one.
 
+### `prepare-release`
+
+| Input | Default | |
+| --- | --- | --- |
+| `version` | — | `major`, `minor`, or `patch`, or a version such as `1.4.0` (required) |
+| `project-dir` | `.` | Directory holding the project |
+| `date` | today in `timezone` | Release date, `YYYY-MM-DD` |
+| `timezone` | `America/Los_Angeles` | Time zone that decides today’s date |
+| `notes-file` | — | Also write the new changelog section’s body here, for release notes |
+
+Outputs `previous`, `version`, and `tag`. It edits the working tree and
+nothing else, so a job can run it, look at `git diff`, and decide what to
+commit. Nothing is written unless every check passes. See
+[Releasing](#releasing) for the files it updates and the checks it makes.
+
 ## Adding a generator
 
 One new action; nothing downstream changes. The contract every builder
@@ -547,6 +659,14 @@ python3 -m pip install build twine
 build-python-dist.sh --tag v1.2.3    # checks versions, builds into dist/
 ```
 
+`prepare-release.sh` needs `jq`, and runs on the bash 3.2 macOS ships. It
+makes the same edits a release would, so `git diff` previews one and
+`git checkout .` undoes it:
+
+```sh
+prepare-release.sh minor
+```
+
 ## Versioning
 
 Changes are recorded in [CHANGELOG.md](CHANGELOG.md), following
@@ -575,8 +695,10 @@ architecture decision records in [`docs/decisions/`](docs/decisions/).
 
 `.github/workflows/ci.yml` runs on every change: `shellcheck` over the scripts,
 `actionlint` over the workflows, a build per generator against its fixture, a
-Python package build and test run against theirs, the `deploy-site` guards, and a check that the reusable workflows have not drifted
-from the current major tag.
+Python package build and test run against theirs, a release preparation
+against its fixture (`test/test-prepare-release.sh`, which also runs
+locally), the `deploy-site` guards, and a check that the reusable workflows
+have not drifted from the current major tag.
 
 ## Known limitations
 
