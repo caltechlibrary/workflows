@@ -6,11 +6,11 @@
   "codeRepository": "https://github.com/caltechlibrary/workflows",
   "issueTracker": "https://github.com/caltechlibrary/workflows/issues",
   "license": "https://github.com/caltechlibrary/workflows/blob/main/LICENSE.txt",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "developmentStatus": "active",
   "dateCreated": "2026-08-31",
   "dateModified": "2026-08-31",
-  "datePublished": "2026-08-31",
+  "datePublished": "2026-11-02",
   "author": [
     {
       "id": "https://orcid.org/0000-0001-5644-440X",
