@@ -12,6 +12,8 @@ what moved. See
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-20
+
 ### Changed
 
 - `self-release.yml` and the example caller of `release.yml` offer `patch`,
@@ -169,7 +171,8 @@ what moved. See
 - The shared Caltech Pandoc theme in `pandoc/`, overridable per project.
 - Architecture decision records in `docs/decisions/`.
 
-[Unreleased]: https://github.com/caltechlibrary/workflows/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/caltechlibrary/workflows/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/caltechlibrary/workflows/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/caltechlibrary/workflows/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/caltechlibrary/workflows/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/caltechlibrary/workflows/compare/v1.3.0...v1.4.0
